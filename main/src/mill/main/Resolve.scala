@@ -70,17 +70,15 @@ trait Resolve[T] {
   def resolve(
       evaluator: Evaluator,
       scriptArgs: Seq[String],
-      selectMode: SelectMode
   ): Either[String, List[T]] = {
-    resolve0(Some(evaluator), evaluator.rootModule, scriptArgs, selectMode)
+    resolve0(Some(evaluator), evaluator.rootModule, scriptArgs)
   }
   def resolve0(
       evaluatorOpt: Option[Evaluator],
       baseModule: BaseModule,
       scriptArgs: Seq[String],
-      selectMode: SelectMode
   ): Either[String, List[T]] = {
-    val resolvedGroups = ParseArgs(scriptArgs, selectMode).flatMap { groups =>
+    val resolvedGroups = ParseArgs(scriptArgs).flatMap { groups =>
       val resolved = groups.map { case (selectors, args) =>
         val selected = selectors.map { case (scopedSel, sel) =>
           resolveRootModule(baseModule, scopedSel).map { rootModule =>

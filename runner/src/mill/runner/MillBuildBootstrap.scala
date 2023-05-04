@@ -3,7 +3,7 @@ import mill.util.{ColorLogger, PrefixLogger, Util, Watchable}
 import mill.{BuildInfo, T}
 import mill.api.{PathRef, Val, internal}
 import mill.eval.Evaluator
-import mill.main.{RootModule, RunScript, SelectMode}
+import mill.main.{RootModule, RunScript}
 import mill.main.TokenReaders._
 import mill.define.{Discover, Segments}
 
@@ -334,7 +334,7 @@ object MillBuildBootstrap {
   ): (Either[String, Seq[Any]], Seq[Watchable], Seq[Watchable]) = {
     rootModule.evalWatchedValues.clear()
     val evalTaskResult =
-      RunScript.evaluateTasksNamed(evaluator, targetsAndParams, SelectMode.Separated)
+      RunScript.evaluateTasksNamed(evaluator, targetsAndParams)
     val moduleWatched = rootModule.watchedValues.toVector
     val addedEvalWatched = rootModule.evalWatchedValues.toVector
 

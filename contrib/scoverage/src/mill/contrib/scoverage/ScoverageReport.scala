@@ -3,7 +3,7 @@ package mill.contrib.scoverage
 import mill.contrib.scoverage.api.ScoverageReportWorkerApi.ReportType
 import mill.define.{Command, Module, Task}
 import mill.eval.Evaluator
-import mill.main.{ResolveTasks, RunScript, SelectMode}
+import mill.main.ResolveTasks
 import mill.{PathRef, T}
 import os.Path
 
@@ -83,7 +83,6 @@ trait ScoverageReport extends Module {
     val sourcesTasks: Seq[Task[Seq[PathRef]]] = ResolveTasks.resolve(
       evaluator,
       Seq(sources),
-      SelectMode.Single
     ) match {
       case Left(err) => throw new Exception(err)
       case Right(tasks) => tasks.asInstanceOf[Seq[Task[Seq[PathRef]]]]
@@ -91,7 +90,6 @@ trait ScoverageReport extends Module {
     val dataTasks: Seq[Task[PathRef]] = ResolveTasks.resolve(
       evaluator,
       Seq(dataTargets),
-      SelectMode.Single
     ) match {
       case Left(err) => throw new Exception(err)
       case Right(tasks) => tasks.asInstanceOf[Seq[Task[PathRef]]]

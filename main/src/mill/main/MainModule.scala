@@ -5,7 +5,6 @@ import mill.{BuildInfo, T}
 import mill.api.{Ctx, Logger, PathRef, Result, internal}
 import mill.define.{Command, NamedTask, Segments, TargetImpl, Task}
 import mill.eval.{Evaluator, EvaluatorPaths}
-import mill.main.SelectMode.Separated
 import mill.util.{PrintLogger, Watchable}
 import pprint.{Renderer, Tree, Truncated}
 import ujson.Value
@@ -18,9 +17,8 @@ object MainModule {
   def resolveTasks[T](
       evaluator: Evaluator,
       targets: Seq[String],
-      selectMode: SelectMode
   )(f: List[NamedTask[Any]] => T): Result[T] = {
-    ResolveTasks.resolve(evaluator, targets, selectMode) match {
+    ResolveTasks.resolve(evaluator, targets) match {
       case Left(err) => Result.Failure(err)
       case Right(tasks) => Result.Success(f(tasks))
     }
@@ -42,7 +40,6 @@ object MainModule {
         }
       ),
       targets,
-      Separated
     ) match {
       case Left(err) => Result.Failure(err)
       case Right((watched, Left(err))) =>
@@ -112,7 +109,6 @@ trait MainModule extends mill.Module {
     val resolved: Either[String, List[String]] = ResolveMetadata.resolve(
       evaluator,
       targets,
-      SelectMode.Multi
     )
 
     resolved match {
@@ -142,7 +138,6 @@ trait MainModule extends mill.Module {
     ResolveTasks.resolve(
       evaluator,
       targets,
-      SelectMode.Multi
     ) match {
       case Left(err) => Left(err)
       case Right(rs) =>
@@ -161,7 +156,6 @@ trait MainModule extends mill.Module {
     val resolved = ResolveTasks.resolve(
       evaluator,
       List(src, dest),
-      SelectMode.Multi
     )
 
     resolved match {
@@ -251,7 +245,7 @@ trait MainModule extends mill.Module {
       )
     }
 
-    MainModule.resolveTasks(evaluator, targets, SelectMode.Multi) { tasks =>
+    MainModule.resolveTasks(evaluator, targets) { tasks =>
       val output = (for {
         task <- tasks
         tree = pprintTask(task, evaluator)
@@ -321,11 +315,7 @@ trait MainModule extends mill.Module {
       if (targets.isEmpty)
         Right(os.list(rootDir).filterNot(keepPath))
       else
-        mill.main.ResolveSegments.resolve(
-          evaluator,
-          targets,
-          SelectMode.Multi
-        ).map { ts =>
+        mill.main.ResolveSegments.resolve(evaluator, targets).map { ts =>
           ts.flatMap { segments =>
             val evPaths = EvaluatorPaths.resolveDestPaths(rootDir, segments)
             val paths = Seq(evPaths.dest, evPaths.meta, evPaths.log)
@@ -393,7 +383,6 @@ trait MainModule extends mill.Module {
     RunScript.evaluateTasksNamed(
       evaluator,
       Seq("mill.scalalib.giter8.Giter8Module/init") ++ args,
-      SelectMode.Single
     )
 
     ()
@@ -420,11 +409,7 @@ trait MainModule extends mill.Module {
       out.take()
     }
 
-    ResolveTasks.resolve(
-      evaluator,
-      targets,
-      SelectMode.Multi
-    ) match {
+    ResolveTasks.resolve(evaluator, targets) match {
       case Left(err) => Result.Failure(err)
       case Right(rs) => planTasks match {
           case Some(allRs) => {

@@ -14,12 +14,11 @@ object RunScript {
   def evaluateTasksNamed[T](
       evaluator: Evaluator,
       scriptArgs: Seq[String],
-      selectMode: SelectMode
   ): Either[
     String,
     (Seq[Watchable], Either[String, Seq[(Any, Option[(TaskName, ujson.Value)])]])
   ] = {
-    for (targets <- ResolveTasks.resolve(evaluator, scriptArgs, selectMode))
+    for (targets <- ResolveTasks.resolve(evaluator, scriptArgs))
       yield evaluateNamed(evaluator, Agg.from(targets.distinct))
   }
 

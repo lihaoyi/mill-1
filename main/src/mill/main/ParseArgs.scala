@@ -7,19 +7,6 @@ import mill.util.EitherOps
 
 import scala.annotation.tailrec
 
-sealed trait SelectMode
-object SelectMode {
-
-  /** All args are treated as targets or commands. If a `--` is detected, subsequent args are parameters to all commands. */
-  object Multi extends SelectMode
-
-  /** Only the first arg is treated as target or command, subsequent args are parameters of the command. */
-  object Single extends SelectMode
-
-  /** Like a combination of [[Single]] and [[Multi]], behaving like [[Single]] but using a special separator (`++`) to start parsing another target/command. */
-  object Separated extends SelectMode
-}
-
 object ParseArgs {
 
   type TargetsWithParams = (Seq[(Option[Segments], Segments)], Seq[String])
@@ -32,7 +19,6 @@ object ParseArgs {
 
   def apply(
       scriptArgs: Seq[String],
-      selectMode: SelectMode
   ): Either[String, Seq[TargetsWithParams]] = {
 
     val MaskPattern = ("""\\+\Q""" + TargetSeparator + """\E""").r
@@ -56,7 +42,7 @@ object ParseArgs {
     }
     val parts: Seq[Seq[String]] = separated(Seq(), scriptArgs)
     val parsed: Seq[Either[String, TargetsWithParams]] =
-      parts.map(extractAndValidate(_, selectMode == SelectMode.Multi))
+      parts.map(extractAndValidate(_))
 
     val res1: Either[String, Seq[TargetsWithParams]] = EitherOps.sequence(parsed)
 
@@ -65,9 +51,8 @@ object ParseArgs {
 
   private def extractAndValidate(
       scriptArgs: Seq[String],
-      multiSelect: Boolean
   ): Either[String, TargetsWithParams] = {
-    val (selectors, args) = extractSelsAndArgs(scriptArgs, multiSelect)
+    val (selectors, args) = extractSelsAndArgs(scriptArgs)
     for {
       _ <- validateSelectors(selectors)
       expandedSelectors <- EitherOps
@@ -79,18 +64,8 @@ object ParseArgs {
 
   def extractSelsAndArgs(
       scriptArgs: Seq[String],
-      multiSelect: Boolean
   ): (Seq[String], Seq[String]) = {
-
-    if (multiSelect) {
-      val dd = scriptArgs.indexOf(MultiArgsSeparator)
-      val selectors = if (dd == -1) scriptArgs else scriptArgs.take(dd)
-      val args = if (dd == -1) Seq.empty else scriptArgs.drop(dd + 1)
-
-      (selectors, args)
-    } else {
-      (scriptArgs.take(1), scriptArgs.drop(1))
-    }
+    (scriptArgs.take(1), scriptArgs.drop(1))
   }
 
   private def validateSelectors(selectors: Seq[String]): Either[String, Unit] = {

@@ -10,11 +10,8 @@ object Tasks {
   class TokenReader[T]() extends mainargs.TokensReader.Simple[Tasks[T]] {
     def shortName = "<tasks>"
     def read(s: Seq[String]) = {
-      ResolveTasks.resolve(
-        Evaluator.currentEvaluator.value,
-        s,
-        SelectMode.Single
-      ).map(x => Tasks(x.asInstanceOf[Seq[mill.define.NamedTask[T]]]))
+      ResolveTasks.resolve(Evaluator.currentEvaluator.value, s)
+        .map(x => Tasks(x.asInstanceOf[Seq[mill.define.NamedTask[T]]]))
     }
     override def alwaysRepeatable = false
     override def allowEmpty = false
