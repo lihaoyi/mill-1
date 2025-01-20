@@ -1,0 +1,60 @@
+// tag::header[]
+
+# Pros and cons of putting all your code in a Monorepo
+
+
+:author: Li Haoyi
+:revdate: ???
+_{author}, {revdate}_
+
+include::mill:ROOT:partial$gtag-config.adoc[]
+
+A monorepo is a technique where the code of multiple separate projects are hosted
+in the same source-control repository. Popularized by silicon valley companies like
+Google or Facebook, this differs from the obvious approach of giving every project
+its own repo. Monorepos have a lot of surprising benefits if used correctly, but there
+are a lot of intricacies in how monorepos work, and challenges to overcome to use them
+well. This article will dive into these details, to set you up for success in case you
+are considering adopting a monorepo code layout yourself in future.
+
+## What is and isn't a Monorepo
+
+At its simplest, a monorepo involves taking all the code in your organization, and
+putting them in a single source-control repository: these days most commonly a Git
+repository hosted on Github. This may include the code for multiple backend services,
+frontend webapps, mobile apps on iOS and Android, data processing jobs, and other things.
+This is contrast to traditional practices, where you often have "one repo per app"
+or "one repo per service", resulting in dozens to over a hundred separate source control
+repositories for any engineering organization of significant size.
+
+Notably, a monorepo does not mean that all your code is:
+
+1. Owned by a single team
+2. Tested a single unit
+3. Deployed in a single binary
+
+The "monorepo" code organization is orthogonal to how your code is owned, tested, and
+deployed. There are many codebases split out over multiple repos that are owned, tested,
+and deployed as singular monoliths. Conversely, there are also many monorepos made of
+independent modules that have separate ownership, selectively tested, and are deployed
+to different microservices and applications.
+
+## Benefits of using a Monorepo
+
+
+### Easy Code Sharing
+
+
+### Single Version History
+
+### Atomic Changes
+
+### Easy End-To-End Testing
+
+## Challenges of using a Monorepo
+
+### No Access Control
+
+### Build & Test Performance
+
+### Code Ownership
