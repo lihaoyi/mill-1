@@ -33,7 +33,7 @@ final class EvaluatorImpl private[mill] (
     private[mill] val selectiveExecution: Boolean = false,
     private val execution: Execution
 ) extends Evaluator {
-  java.nio.file.Files.createSymbolicLink((outPath / "mill-home").toNIO, os.home.wrapped)
+  mill.internal.MillPathSerializer.setupSymlinks(os.pwd, workspace)
   private[mill] def workspace = execution.workspace
   private[mill] def baseLogger = execution.baseLogger
   private[mill] def outPath = execution.outPath
@@ -59,13 +59,17 @@ final class EvaluatorImpl private[mill] (
       resolveToModuleTasks: Boolean = false
   ): mill.api.Result[List[Segments]] = {
     os.checker.withValue(EvaluatorImpl.resolveChecker) {
-      Resolve.Segments.resolve(
-        rootModule,
-        scriptArgs,
-        selectMode,
-        allowPositionalCommandArgs,
-        resolveToModuleTasks
-      )
+      os.Path.pathSerializer.withValue(new MillPathSerializer(
+        MillPathSerializer.defaultMapping(workspace)
+      )) {
+        Resolve.Segments.resolve(
+          rootModule,
+          scriptArgs,
+          selectMode,
+          allowPositionalCommandArgs,
+          resolveToModuleTasks
+        )
+      }
     }
   }
 
@@ -80,14 +84,18 @@ final class EvaluatorImpl private[mill] (
       resolveToModuleTasks: Boolean = false
   ): mill.api.Result[List[NamedTask[?]]] = {
     os.checker.withValue(EvaluatorImpl.resolveChecker) {
-      Evaluator.currentEvaluator0.withValue(this) {
-        Resolve.Tasks.resolve(
-          rootModule,
-          scriptArgs,
-          selectMode,
-          allowPositionalCommandArgs,
-          resolveToModuleTasks
-        )
+      os.Path.pathSerializer.withValue(new MillPathSerializer(
+        MillPathSerializer.defaultMapping(workspace)
+      )) {
+        Evaluator.currentEvaluator0.withValue(this) {
+          Resolve.Tasks.resolve(
+            rootModule,
+            scriptArgs,
+            selectMode,
+            allowPositionalCommandArgs,
+            resolveToModuleTasks
+          )
+        }
       }
     }
   }
@@ -97,6 +105,12 @@ final class EvaluatorImpl private[mill] (
    * transitive upstream tasks necessary to evaluate those provided.
    */
   def plan(tasks: Seq[Task[?]]): Plan = PlanImpl.plan(tasks)
+
+  object SetupSymlinkSpawnHook extends (os.Path => Unit) {
+    def apply(p: os.Path): Unit = MillPathSerializer.setupSymlinks(p, workspace)
+
+    override def toString(): String = "SetupSymlinkSpawnHook"
+  }
 
   /**
    * @param targets
@@ -110,7 +124,7 @@ final class EvaluatorImpl private[mill] (
       logger: ColorLogger = baseLogger,
       serialCommandExec: Boolean = false,
       selectiveExecution: Boolean = false
-  ): Evaluator.Result[T] = {
+  ): Evaluator.Result[T] = os.ProcessOps.spawnHook.withValue(SetupSymlinkSpawnHook) {
     os.Path.pathSerializer.withValue(new MillPathSerializer(
       MillPathSerializer.defaultMapping(workspace)
     )) {
@@ -218,19 +232,23 @@ final class EvaluatorImpl private[mill] (
       selectMode: SelectMode,
       selectiveExecution: Boolean = false
   ): mill.api.Result[Evaluator.Result[Any]] = {
-    val resolved = os.checker.withValue(EvaluatorImpl.resolveChecker) {
-      Evaluator.currentEvaluator0.withValue(this) {
-        Resolve.Tasks.resolve(
-          rootModule,
-          scriptArgs,
-          selectMode,
-          allowPositionalCommandArgs
-        )
+    os.Path.pathSerializer.withValue(new MillPathSerializer(
+      MillPathSerializer.defaultMapping(workspace)
+    )) {
+      val resolved = os.checker.withValue(EvaluatorImpl.resolveChecker) {
+        Evaluator.currentEvaluator0.withValue(this) {
+          Resolve.Tasks.resolve(
+            rootModule,
+            scriptArgs,
+            selectMode,
+            allowPositionalCommandArgs
+          )
+        }
       }
-    }
 
-    for (targets <- resolved)
-      yield execute(Seq.from(targets), selectiveExecution = selectiveExecution)
+      for (targets <- resolved)
+        yield execute(Seq.from(targets), selectiveExecution = selectiveExecution)
+    }
   }
 
   def close(): Unit = execution.close()

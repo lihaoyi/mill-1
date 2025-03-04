@@ -1,10 +1,21 @@
 package mill.internal
 
+import java.nio.file.Files
 
 object MillPathSerializer {
+  def setupSymlinks(wd: os.Path, workspace: os.Path) = {
+
+
+    for((base, link) <- defaultMapping(workspace)){
+      os.makeDir.all(wd / link / "..")
+      os.remove(wd / link)
+      Files.createSymbolicLink((wd / link).toNIO, base.wrapped)
+    }
+  }
+
   def defaultMapping(workspace: os.Path): Seq[(os.Path, os.SubPath)] = Seq(
-    workspace -> os.sub / "mill-workspace",
-    os.home -> os.sub / "mill-home"
+    workspace -> os.sub / "out/mill-workspace",
+    os.home -> os.sub / "out/mill-home"
   )
 }
 class MillPathSerializer(mapping: Seq[(os.Path, os.SubPath)])

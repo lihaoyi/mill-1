@@ -619,9 +619,14 @@ class ZincWorkerImpl(
     }
     val analysisMap0 = upstreamCompileOutput.map(c => c.classes.path -> c.analysisFile).toMap
 
+    val pathSerializer = os.Path.pathSerializer.value
     def analysisMap(f: VirtualFile): Optional[CompileAnalysis] = {
       val analysisFile = f match {
-        case pathBased: PathBasedFile => analysisMap0.get(os.Path(pathBased.toPath))
+        case pathBased: PathBasedFile =>
+          // This runs on a separate thread in Zinc's internal threadpool we don't control
+          os.Path.pathSerializer.withValue(pathSerializer) {
+            analysisMap0.get(os.Path(pathBased.toPath))
+          }
         case _ => None
       }
       analysisFile match {
