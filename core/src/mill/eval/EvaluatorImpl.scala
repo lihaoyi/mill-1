@@ -32,7 +32,7 @@ final class EvaluatorImpl private[mill] (
     private[mill] val selectiveExecution: Boolean = false,
     private val execution: Execution
 ) extends Evaluator {
-
+  mill.internal.MillPathSerializer.setupSymlinks(os.pwd, workspace)
   private[mill] def workspace = execution.workspace
   private[mill] def baseLogger = execution.baseLogger
   private[mill] def outPath = execution.outPath

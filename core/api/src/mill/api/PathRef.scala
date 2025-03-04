@@ -109,58 +109,60 @@ object PathRef {
   ): PathRef = {
     val basePath = path
 
+    val sig = {
+      val isPosix = path.wrapped.getFileSystem.supportedFileAttributeViews().contains("posix")
+      val digest = MessageDigest.getInstance("MD5")
+      val digestOut = new DigestOutputStream(DummyOutputStream, digest)
 
-    val isPosix = path.wrapped.getFileSystem.supportedFileAttributeViews().contains("posix")
-    val digest = MessageDigest.getInstance("MD5")
-    val digestOut = new DigestOutputStream(DummyOutputStream, digest)
+      def updateWithInt(value: Int): Unit = {
+        digest.update((value >>> 24).toByte)
+        digest.update((value >>> 16).toByte)
+        digest.update((value >>> 8).toByte)
+        digest.update(value.toByte)
+      }
 
-    def updateWithInt(value: Int): Unit = {
-      digest.update((value >>> 24).toByte)
-      digest.update((value >>> 16).toByte)
-      digest.update((value >>> 8).toByte)
-      digest.update(value.toByte)
-    }
+      if (os.exists(path)) {
+        for (
+          (path, attrs) <-
+            os.walk.attrs(path, includeTarget = true, followLinks = true).sortBy(_._1.toString)
+        ) {
+          val sub = path.subRelativeTo(basePath)
+          digest.update(sub.toString().getBytes())
+          if (!attrs.isDir) {
+            try {
+              if (isPosix) updateWithInt(os.perms(path, followLinks = false).value)
+              if (quick) {
+                val value = (attrs.mtime, attrs.size).hashCode()
+                updateWithInt(value)
+              } else if (jnio.Files.isReadable(path.toNIO)) {
+                val is =
+                  try Some(os.read.inputStream(path))
+                  catch {
+                    case _: jnio.FileSystemException =>
+                      // This is known to happen, when we try to digest a socket file.
+                      // We ignore the content of this file for now, as we would do,
+                      // when the file isn't readable.
+                      // See https://github.com/com-lihaoyi/mill/issues/1875
+                      None
+                  }
+                is.foreach(os.Internals.transfer(_, digestOut))
+              }
+            } catch {
+              case e: java.nio.file.NoSuchFileException =>
+              // If file was deleted after we listed the folder but before we operate on it,
+              // `os.perms` or `os.read.inputStream` will crash. In that case, just do nothing,
+              // so next time we calculate the `PathRef` we'll get a different hash signature
+              // (either with the file missing, or with the file present) and invalidate any
+              // caches
 
-    if (os.exists(path)) {
-      for (
-        (path, attrs) <-
-          os.walk.attrs(path, includeTarget = true, followLinks = true).sortBy(_._1.toString)
-      ) {
-        val sub = path.subRelativeTo(basePath)
-        digest.update(sub.toString().getBytes())
-        if (!attrs.isDir) {
-          try {
-            if (isPosix) updateWithInt(os.perms(path, followLinks = false).value)
-            if (quick) {
-              val value = (attrs.mtime, attrs.size).hashCode()
-              updateWithInt(value)
-            } else if (jnio.Files.isReadable(path.toNIO)) {
-              val is =
-                try Some(os.read.inputStream(path))
-                catch {
-                  case _: jnio.FileSystemException =>
-                    // This is known to happen, when we try to digest a socket file.
-                    // We ignore the content of this file for now, as we would do,
-                    // when the file isn't readable.
-                    // See https://github.com/com-lihaoyi/mill/issues/1875
-                    None
-                }
-              is.foreach(os.Internals.transfer(_, digestOut))
             }
-          } catch {
-            case e: java.nio.file.NoSuchFileException =>
-            // If file was deleted after we listed the folder but before we operate on it,
-            // `os.perms` or `os.read.inputStream` will crash. In that case, just do nothing,
-            // so next time we calculate the `PathRef` we'll get a different hash signature
-            // (either with the file missing, or with the file present) and invalidate any
-            // caches
-
           }
         }
       }
+
+      java.util.Arrays.hashCode(digest.digest())
     }
 
-    val sig = java.util.Arrays.hashCode(digest.digest())
     new PathRef(path, quick, sig, revalidate)
   }
 
