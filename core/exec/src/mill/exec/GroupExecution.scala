@@ -276,25 +276,22 @@ private trait GroupExecution {
               if (exclusive) (exclusiveSystemStreams, () => workspace)
               else (multiLogger.systemStreams, () => makeDest())
 
-
-
-            os.ProcessOps.spawnHook.withValue(p => MillPathSerializer.setupSymlinks(p, workspace)) {
-              os.dynamicPwdFunction.withValue(destFunc) {
-                os.checker.withValue(executionChecker) {
-                  SystemStreams.withStreams(streams) {
-                    val exposedEvaluator = if (!exclusive) null else getEvaluator()
-                    Evaluator.currentEvaluator0.withValue(exposedEvaluator) {
-                      if (!exclusive) t
-                      else {
-                        logger.reportKey(Seq(counterMsg))
-                        logger.withPromptPaused {
-                          t
-                        }
+            os.dynamicPwdFunction.withValue(destFunc) {
+              os.checker.withValue(executionChecker) {
+                SystemStreams.withStreams(streams) {
+                  val exposedEvaluator = if (!exclusive) null else getEvaluator()
+                  Evaluator.currentEvaluator0.withValue(exposedEvaluator) {
+                    if (!exclusive) t
+                    else {
+                      logger.reportKey(Seq(counterMsg))
+                      logger.withPromptPaused {
+                        t
                       }
                     }
                   }
                 }
               }
+            
             }
 
           }

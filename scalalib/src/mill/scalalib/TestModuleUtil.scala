@@ -63,9 +63,6 @@ private[scalalib] object TestModuleUtil {
       os.makeDir.all(sandbox)
 
       os.checker.withValue(os.Checker.Nop) {
-        mill.constants.DebugLog.println((runClasspath ++ testrunnerEntrypointClasspath).map(_.path).mkString("\n"))
-        mill.constants.DebugLog.println("\n" + new java.io.File(".").getAbsolutePath)
-        mill.constants.DebugLog.println("\n" + (if (testSandboxWorkingDir) sandbox else forkWorkingDir))
         Jvm.callProcess(
           mainClass = "mill.testrunner.entrypoint.TestRunnerMain",
           classPath = (runClasspath ++ testrunnerEntrypointClasspath).map(_.path),
