@@ -643,7 +643,6 @@ class ZincWorkerImpl(
       .map(path => converter.toVirtualFile(os.Path.pathSerializer.value.serializePath(path)))
       .toArray
 
-
     val incOptions = IncOptions.of().withAuxiliaryClassFiles(
       auxiliaryClassFileExtensions.map(new AuxiliaryClassFileExtension(_)).toArray
     )

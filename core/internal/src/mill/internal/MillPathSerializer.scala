@@ -3,7 +3,7 @@ package mill.internal
 import java.nio.file.Files
 
 object MillPathSerializer {
-  def setupSymlinks(wd: os.Path, workspace: os.Path) ={
+  def setupSymlinks(wd: os.Path, workspace: os.Path) = {
 
     os.remove(wd / "mill-home")
     Files.createSymbolicLink((wd / "mill-home").toNIO, os.home.wrapped)
@@ -19,7 +19,7 @@ object MillPathSerializer {
   )
 }
 class MillPathSerializer(mapping: Seq[(os.Path, os.SubPath)])
-  extends os.Path.Serializer {
+    extends os.Path.Serializer {
 
   def mapPathPrefixes(path: os.Path, mapping: Seq[(os.Path, os.SubPath)]): os.FilePath = {
     mapping
@@ -27,20 +27,25 @@ class MillPathSerializer(mapping: Seq[(os.Path, os.SubPath)])
       .getOrElse(path)
   }
 
-  def mapPathPrefixes2(path: java.nio.file.Path, mapping: Seq[(os.SubPath, os.Path)]): java.nio.file.Path = {
+  def mapPathPrefixes2(
+      path: java.nio.file.Path,
+      mapping: Seq[(os.SubPath, os.Path)]
+  ): java.nio.file.Path = {
     mapping
-      .collectFirst { case (from, to) if path.startsWith(from.toNIO) || from.segments.isEmpty =>
-        to.wrapped.resolve(
-          // relativize misbehaves on empty paths
-          if (from.segments.isEmpty) path else from.toNIO.relativize(path)
-        )
+      .collectFirst {
+        case (from, to) if path.startsWith(from.toNIO) || from.segments.isEmpty =>
+          to.wrapped.resolve(
+            // relativize misbehaves on empty paths
+            if (from.segments.isEmpty) path else from.toNIO.relativize(path)
+          )
       }
       .getOrElse(path)
   }
 
   def normalizePath(path: os.Path): os.FilePath = mapPathPrefixes(path, mapping)
 
-  def denormalizePath(path: java.nio.file.Path): java.nio.file.Path = mapPathPrefixes2(path, mapping.map(_.swap))
+  def denormalizePath(path: java.nio.file.Path): java.nio.file.Path =
+    mapPathPrefixes2(path, mapping.map(_.swap))
 
   def serializeString(p: os.Path): String = normalizePath(p) match {
     case p: os.SubPath => p.toNIO.toString
@@ -61,7 +66,8 @@ class MillPathSerializer(mapping: Seq[(os.Path, os.SubPath)])
 
   def deserialize(s: java.io.File) = denormalizePath(os.Path.defaultPathSerializer.deserialize(s))
 
-  def deserialize(s: java.nio.file.Path) = denormalizePath(os.Path.defaultPathSerializer.deserialize(s))
+  def deserialize(s: java.nio.file.Path) =
+    denormalizePath(os.Path.defaultPathSerializer.deserialize(s))
 
   def deserialize(s: java.net.URI) = denormalizePath(os.Path.defaultPathSerializer.deserialize(s))
 

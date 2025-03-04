@@ -3,7 +3,7 @@ package mill.exec
 import mill.api.ExecResult.{OuterStack, Success}
 import mill.api.*
 import mill.define.*
-import mill.internal.{FileLogger, MillPathSerializer, MultiLogger}
+import mill.internal.{FileLogger, MultiLogger}
 
 import java.lang.reflect.Method
 import scala.collection.mutable
@@ -79,9 +79,8 @@ private trait GroupExecution {
       val inputsHash =
         externalInputsHash + sideHashes + classLoaderSigHash + scriptsHash + javaHomeHash
 
-
-      def transformResults(results: Map[Task[?], ExecResult[(Val, Option[ujson.Value])]]):
-      Map[Task[?], ExecResult[(Val, Int)]] = {
+      def transformResults(results: Map[Task[?], ExecResult[(Val, Option[ujson.Value])]])
+          : Map[Task[?], ExecResult[(Val, Int)]] = {
         for ((k, v0) <- results)
           yield k -> v0.map { case (v, jsonOpt) => (v, getValueHash(k, inputsHash, v, jsonOpt)) }
       }
@@ -103,7 +102,6 @@ private trait GroupExecution {
               .orElse(cached.flatMap { case (inputHash, valOpt, valueHash) =>
                 valOpt.map((_, valueHash))
               })
-
 
           cachedValueAndHash match {
             case Some((v, hashCode)) =>
@@ -140,7 +138,6 @@ private trait GroupExecution {
                   labelled.isInstanceOf[Command[?]],
                   deps
                 )
-
 
               val valueHash = newResults(labelled) match {
                 case ExecResult.Success((v, jsonOpt)) =>
@@ -291,7 +288,7 @@ private trait GroupExecution {
                   }
                 }
               }
-            
+
             }
 
           }
@@ -439,7 +436,6 @@ private trait GroupExecution {
       cached.valueHash
     )
   }
-
 
   def getValueHash(t: Task[_], inputsHash: Int, v: Val, jsonOpt: Option[ujson.Value]): Int = {
     if (t.isInstanceOf[Worker[_]]) inputsHash

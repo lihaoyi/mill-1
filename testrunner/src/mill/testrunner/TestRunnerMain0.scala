@@ -6,7 +6,9 @@ import mill.internal.PrintLogger
 @internal object TestRunnerMain0 {
   def main0(args: Array[String], classLoader: ClassLoader): Unit = {
     try {
-      os.Path.pathSerializer.withValue(new mill.internal.MillPathSerializer(Seq(os.pwd -> os.sub))) {
+      os.Path.pathSerializer.withValue(
+        new mill.internal.MillPathSerializer(Seq(os.pwd -> os.sub))
+      ) {
         val testArgs = upickle.default.read[mill.testrunner.TestArgs](os.read(os.Path(args(1))))
         val ctx = new Ctx.Log {
           val log = new PrintLogger(

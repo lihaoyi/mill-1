@@ -180,7 +180,10 @@ class MillBuildBootstrap(
         val rootModuleRes = nestedState.frames.headOption match {
           case None => Result.Success(nestedState.bootstrapModuleOpt.get)
           case Some(nestedFrame) =>
-            try Result.Success(getRootModule(nestedFrame.classLoaderOpt.get, recRoot(projectRoot, depth)))
+            try Result.Success(getRootModule(
+                nestedFrame.classLoaderOpt.get,
+                recRoot(projectRoot, depth)
+              ))
             catch {
               case e: Throwable => Result.Failure(renderFailure(e))
             }
@@ -510,7 +513,9 @@ object MillBuildBootstrap {
   def getRootModule(runClassLoader: URLClassLoader, workspace: os.Path): RootModule = {
     val buildClass = runClassLoader.loadClass(s"$globalPackagePrefix.${wrapperObjectName}$$")
     MillPathSerializer.setupSymlinks(os.pwd, workspace)
-    os.Path.pathSerializer.withValue(new MillPathSerializer(MillPathSerializer.defaultMapping(workspace))) {
+    os.Path.pathSerializer.withValue(new MillPathSerializer(
+      MillPathSerializer.defaultMapping(workspace)
+    )) {
       os.checker.withValue(EvaluatorImpl.resolveChecker) {
         buildClass.getField("MODULE$").get(buildClass).asInstanceOf[RootModule]
       }

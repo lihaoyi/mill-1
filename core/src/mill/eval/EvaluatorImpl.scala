@@ -1,6 +1,14 @@
 package mill.eval
 
-import mill.api.{ColorLogger, CompileProblemReporter, DummyTestReporter, ExecResult, PathRef, TestReporter, Val}
+import mill.api.{
+  ColorLogger,
+  CompileProblemReporter,
+  DummyTestReporter,
+  ExecResult,
+  PathRef,
+  TestReporter,
+  Val
+}
 import mill.constants.OutFiles
 import mill.define.*
 import mill.exec.{Execution, PlanImpl}
@@ -94,7 +102,6 @@ final class EvaluatorImpl private[mill] (
     def apply(p: os.Path): Unit = MillPathSerializer.setupSymlinks(p, workspace)
   }
 
-  
   /**
    * @param targets
    * @param selectiveExecution
@@ -108,7 +115,9 @@ final class EvaluatorImpl private[mill] (
       serialCommandExec: Boolean = false,
       selectiveExecution: Boolean = false
   ): Evaluator.Result[T] = os.ProcessOps.spawnHook.withValue(SetupSymlinkSpawnHook) {
-    os.Path.pathSerializer.withValue(new MillPathSerializer(MillPathSerializer.defaultMapping(workspace))) {
+    os.Path.pathSerializer.withValue(new MillPathSerializer(
+      MillPathSerializer.defaultMapping(workspace)
+    )) {
 
       val selectiveExecutionEnabled = selectiveExecution && !targets.exists(_.isExclusiveCommand)
 
@@ -121,7 +130,9 @@ final class EvaluatorImpl private[mill] (
           val selectedSet = changedTasks.downstreamTasks.map(_.ctx.segments.render).toSet
 
           (
-            unnamed ++ named.filter(t => t.isExclusiveCommand || selectedSet(t.ctx.segments.render)),
+            unnamed ++ named.filter(t =>
+              t.isExclusiveCommand || selectedSet(t.ctx.segments.render)
+            ),
             changedTasks.results
           )
         } else (targets, Map.empty)

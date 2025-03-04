@@ -121,7 +121,6 @@ object FileImportGraph {
               Seq(rootModuleAlias) ++
                 os.readLink.absolute(s / os.up).relativeTo(projectRoot).segments
 
-
             val expectedImportSegments = expectedImportSegments0.map(backtickWrap).mkString(".")
             if (
               // Legacy `.sc` files have their package build be optional
