@@ -5,20 +5,17 @@ import java.nio.file.Files
 object MillPathSerializer {
   def setupSymlinks(wd: os.Path, workspace: os.Path) ={
 
-//    if (!os.exists(wd / "mill-home", followLinks = false)) {
-//      os.symlink(wd / "mill-home", os.home)
-//    }
-    if (!os.exists(wd / "mill-workspace", followLinks = false)) {
-      Files.createSymbolicLink(
-        (wd / "mill-workspace").toNIO,
-        workspace.wrapped
-      )
-    }
+    os.remove(wd / "mill-home")
+    Files.createSymbolicLink((wd / "mill-home").toNIO, os.home.wrapped)
+
+    os.remove(wd / "mill-workspace")
+    Files.createSymbolicLink((wd / "mill-workspace").toNIO, workspace.wrapped)
+
   }
 
   def defaultMapping(workspace: os.Path): Seq[(os.Path, os.SubPath)] = Seq(
     workspace -> os.sub / "mill-workspace",
-    //    os.home -> os.sub / "mill-home"
+    os.home -> os.sub / "mill-home"
   )
 }
 class MillPathSerializer(mapping: Seq[(os.Path, os.SubPath)])
