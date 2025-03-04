@@ -27,7 +27,9 @@ object ReproducibilityTests extends UtestIntegrationTestSuite {
   val tests: Tests = Tests {
     test("diff") - {
       def run() = integrationTest { tester =>
-        tester.eval(("--meta-level", "1", "runClasspath"))
+        val res = tester.eval(("show", "foo"))
+        // Make sure evaluation completes successfully
+        assert(res.out == "31337")
         tester.workspacePath
       }
 
