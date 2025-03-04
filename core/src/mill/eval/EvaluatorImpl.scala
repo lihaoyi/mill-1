@@ -1,19 +1,12 @@
 package mill.eval
 
-import mill.api.{
-  ColorLogger,
-  CompileProblemReporter,
-  DummyTestReporter,
-  ExecResult,
-  PathRef,
-  TestReporter,
-  Val
-}
+import mill.api.{ColorLogger, CompileProblemReporter, DummyTestReporter, ExecResult, PathRef, TestReporter, Val}
 import mill.constants.OutFiles
 import mill.define.*
 import mill.exec.{Execution, PlanImpl}
 import mill.define.internal.Watchable
 import OutFiles.*
+import mill.internal.MillPathSerializer
 import mill.resolve.Resolve
 
 /**
@@ -109,7 +102,7 @@ final class EvaluatorImpl private[mill] (
       logger: ColorLogger = baseLogger,
       serialCommandExec: Boolean = false,
       selectiveExecution: Boolean = false
-  ): Evaluator.Result[T] = {
+  ): Evaluator.Result[T] = os.Path.pathSerializer.withValue(new MillPathSerializer(MillPathSerializer.defaultMapping(workspace))) {
 
     val selectiveExecutionEnabled = selectiveExecution && !targets.exists(_.isExclusiveCommand)
 

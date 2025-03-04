@@ -79,6 +79,12 @@ private trait GroupExecution {
       val inputsHash =
         externalInputsHash + sideHashes + classLoaderSigHash + scriptsHash + javaHomeHash
 
+
+      def transformResults(results: Map[Task[?], ExecResult[(Val, Option[ujson.Value])]]):
+      Map[Task[?], ExecResult[(Val, Int)]] = {
+        for ((k, v0) <- results)
+          yield k -> v0.map { case (v, jsonOpt) => (v, getValueHash(k, inputsHash, v, jsonOpt)) }
+      }
       terminal match {
 
         case labelled: NamedTask[_] =>
@@ -97,6 +103,7 @@ private trait GroupExecution {
               .orElse(cached.flatMap { case (inputHash, valOpt, valueHash) =>
                 valOpt.map((_, valueHash))
               })
+
 
           cachedValueAndHash match {
             case Some((v, hashCode)) =>
@@ -134,9 +141,10 @@ private trait GroupExecution {
                   deps
                 )
 
+
               val valueHash = newResults(labelled) match {
-                case ExecResult.Success((v, _)) =>
-                  val valueHash = getValueHash(v, terminal, inputsHash)
+                case ExecResult.Success((v, jsonOpt)) =>
+                  val valueHash = getValueHash(labelled, inputsHash, v, jsonOpt)
                   handleTaskResult(v, valueHash, paths.meta, inputsHash, labelled)
                   valueHash
 
@@ -150,7 +158,7 @@ private trait GroupExecution {
               }
 
               GroupExecution.Results(
-                newResults,
+                transformResults(newResults),
                 newEvaluated.toSeq,
                 cached = if (labelled.isInstanceOf[InputImpl[?]]) null else false,
                 inputsHash,
@@ -175,7 +183,7 @@ private trait GroupExecution {
             deps
           )
           GroupExecution.Results(
-            newResults,
+            transformResults(newResults),
             newEvaluated.toSeq,
             null,
             inputsHash,
@@ -201,10 +209,10 @@ private trait GroupExecution {
       exclusive: Boolean,
       isCommand: Boolean,
       deps: Seq[Task[?]]
-  ): (Map[Task[?], ExecResult[(Val, Int)]], mutable.Buffer[Task[?]]) = {
+  ): (Map[Task[?], ExecResult[(Val, Option[ujson.Value])]], mutable.Buffer[Task[?]]) = {
 
     val newEvaluated = mutable.Buffer.empty[Task[?]]
-    val newResults = mutable.Map.empty[Task[?], ExecResult[(Val, Int)]]
+    val newResults = mutable.Map.empty[Task[_], ExecResult[(Val, Option[ujson.Value])]]
 
     val nonEvaluatedTargets = group.toIndexedSeq.filterNot(results.contains)
     val multiLogger = resolveLogger(paths.map(_.log), logger)
@@ -269,19 +277,18 @@ private trait GroupExecution {
               else (multiLogger.systemStreams, () => makeDest())
 
 
-            os.Path.pathSerializer.withValue(new MillPathSerializer(MillPathSerializer.defaultMapping(workspace))) {
-              os.ProcessOps.spawnHook.withValue(p => MillPathSerializer.setupSymlinks(p, workspace)) {
-                os.dynamicPwdFunction.withValue(destFunc) {
-                  os.checker.withValue(executionChecker) {
-                    SystemStreams.withStreams(streams) {
-                      val exposedEvaluator = if (!exclusive) null else getEvaluator()
-                      Evaluator.currentEvaluator0.withValue(exposedEvaluator) {
-                        if (!exclusive) t
-                        else {
-                          logger.reportKey(Seq(counterMsg))
-                          logger.withPromptPaused {
-                            t
-                          }
+
+            os.ProcessOps.spawnHook.withValue(p => MillPathSerializer.setupSymlinks(p, workspace)) {
+              os.dynamicPwdFunction.withValue(destFunc) {
+                os.checker.withValue(executionChecker) {
+                  SystemStreams.withStreams(streams) {
+                    val exposedEvaluator = if (!exclusive) null else getEvaluator()
+                    Evaluator.currentEvaluator0.withValue(exposedEvaluator) {
+                      if (!exclusive) t
+                      else {
+                        logger.reportKey(Seq(counterMsg))
+                        logger.withPromptPaused {
+                          t
                         }
                       }
                     }
@@ -289,6 +296,7 @@ private trait GroupExecution {
                 }
               }
             }
+
           }
 
           wrap {
@@ -311,7 +319,17 @@ private trait GroupExecution {
         }
       }
 
-      newResults(task) = for (v <- res) yield (v, getValueHash(v, task, inputsHash))
+      newResults(task) = for (v <- res) yield {
+        val jsonOpt = task match {
+          case n: NamedTask[_] =>
+            for (w <- n.writerOpt) yield {
+              upickle.default.writeJs(v.value)(using w.asInstanceOf[upickle.default.Writer[Any]])
+            }
+          case _ => None
+        }
+
+        (v, jsonOpt)
+      }
     }
 
     multiLogger.close()
@@ -425,8 +443,13 @@ private trait GroupExecution {
     )
   }
 
-  def getValueHash(v: Val, task: Task[?], inputsHash: Int): Int = {
-    if (task.isInstanceOf[Worker[?]]) inputsHash else v.##
+
+  def getValueHash(t: Task[_], inputsHash: Int, v: Val, jsonOpt: Option[ujson.Value]): Int = {
+    if (t.isInstanceOf[Worker[_]]) inputsHash
+    else jsonOpt match {
+      case Some(json) => json.hashCode()
+      case None => v.##
+    }
   }
   private def loadUpToDateWorker(
       logger: ColorLogger,
