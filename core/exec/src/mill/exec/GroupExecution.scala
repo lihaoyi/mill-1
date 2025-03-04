@@ -86,7 +86,9 @@ private trait GroupExecution {
         case labelled: NamedTask[_] =>
           val out = if (!labelled.ctx.external) outPath else externalOutPath
           val paths = ExecutionPaths.resolve(out, labelled.ctx.segments)
-          val cached = loadCachedJson(logger, inputsHash, labelled, paths)
+          val cached = Option
+            .when(sideHashes == 0) { loadCachedJson(logger, inputsHash, labelled, paths) }
+            .flatten
 
           // `cached.isEmpty` means worker metadata file removed by user so recompute the worker
           val upToDateWorker = loadUpToDateWorker(logger, inputsHash, labelled, cached.isEmpty)
