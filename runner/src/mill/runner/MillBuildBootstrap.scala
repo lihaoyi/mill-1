@@ -512,7 +512,7 @@ object MillBuildBootstrap {
 
   def getRootModule(runClassLoader: URLClassLoader, workspace: os.Path): RootModule = {
     val buildClass = runClassLoader.loadClass(s"$globalPackagePrefix.${wrapperObjectName}$$")
-    MillPathSerializer.setupSymlinks(os.pwd, workspace)
+
     os.Path.pathSerializer.withValue(new MillPathSerializer(
       MillPathSerializer.defaultMapping(workspace)
     )) {

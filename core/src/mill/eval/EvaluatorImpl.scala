@@ -33,7 +33,7 @@ final class EvaluatorImpl private[mill] (
     private[mill] val selectiveExecution: Boolean = false,
     private val execution: Execution
 ) extends Evaluator {
-  mill.internal.MillPathSerializer.setupSymlinks(os.pwd, workspace)
+  java.nio.file.Files.createSymbolicLink((outPath / "mill-home").toNIO, os.home.wrapped)
   private[mill] def workspace = execution.workspace
   private[mill] def baseLogger = execution.baseLogger
   private[mill] def outPath = execution.outPath
@@ -98,12 +98,6 @@ final class EvaluatorImpl private[mill] (
    */
   def plan(tasks: Seq[Task[?]]): Plan = PlanImpl.plan(tasks)
 
-  object SetupSymlinkSpawnHook extends (os.Path => Unit) {
-    def apply(p: os.Path): Unit = MillPathSerializer.setupSymlinks(p, workspace)
-
-    override def toString(): String = "SetupSymlinkSpawnHook"
-  }
-
   /**
    * @param targets
    * @param selectiveExecution
@@ -116,7 +110,7 @@ final class EvaluatorImpl private[mill] (
       logger: ColorLogger = baseLogger,
       serialCommandExec: Boolean = false,
       selectiveExecution: Boolean = false
-  ): Evaluator.Result[T] = os.ProcessOps.spawnHook.withValue(SetupSymlinkSpawnHook) {
+  ): Evaluator.Result[T] = {
     os.Path.pathSerializer.withValue(new MillPathSerializer(
       MillPathSerializer.defaultMapping(workspace)
     )) {
