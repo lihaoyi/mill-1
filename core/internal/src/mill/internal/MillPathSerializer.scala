@@ -5,8 +5,7 @@ import java.nio.file.Files
 object MillPathSerializer {
   def setupSymlinks(wd: os.Path, workspace: os.Path) = {
 
-
-    for((base, link) <- defaultMapping(workspace)){
+    for ((base, link) <- defaultMapping(workspace)) {
       os.makeDir.all(wd / link / "..")
       os.remove(wd / link)
       Files.createSymbolicLink((wd / link).toNIO, base.wrapped)
