@@ -121,248 +121,222 @@ object MillMain {
       systemExit: Int => Nothing,
       serverDir: os.Path
   ): (Boolean, RunnerState) = {
-    val defaultMapping: Seq[(os.Path, os.Path)] = Seq(
-      mill.api.WorkspaceRoot.workspaceRoot -> os.root / "mill-workspace",
-      os.home -> os.root / "mill-home"
-    )
-
-    def mapPathPrefixes(path: os.Path, mapping: Seq[(os.Path, os.Path)]): os.Path = {
-      mapping
-        .collectFirst { case (from, to) if path.startsWith(from) => to / path.subRelativeTo(from) }
-        .getOrElse(path)
-    }
-
-    def normalizePath(path: os.Path): os.Path = mapPathPrefixes(path, defaultMapping)
-
-    def denormalizePath(path: os.Path): os.Path = mapPathPrefixes(path, defaultMapping.map(_.swap))
-
-    object millPathSerializer extends os.Path.Serializer {
-      def serializeString(p: os.Path): String = os.Path.defaultPathSerializer.serializeString(normalizePath(p))
-      def serializeFile(p: os.Path): java.io.File = os.Path.defaultPathSerializer.serializeFile(normalizePath(p))
-      def serializePath(p: os.Path): java.nio.file.Path = os.Path.defaultPathSerializer.serializePath(normalizePath(p))
-      def deserialize(s: String) = denormalizePath(os.Path(os.Path.defaultPathSerializer.deserialize(s))).wrapped
-      def deserialize(s: java.io.File) =  denormalizePath(os.Path(os.Path.defaultPathSerializer.deserialize(s))).wrapped
-      def deserialize(s: java.nio.file.Path) =  denormalizePath(os.Path(os.Path.defaultPathSerializer.deserialize(s))).wrapped
-      def deserialize(s: java.net.URI) =  denormalizePath(os.Path(os.Path.defaultPathSerializer.deserialize(s))).wrapped
-    }
     val printLoggerState = new PrintLogger.State()
     val streams = streams0
-    os.Path.pathSerializer.withValue(millPathSerializer) {
-      SystemStreams.withStreams(streams) {
-        os.SubProcess.env.withValue(env) {
-          MillCliConfigParser.parse(args) match {
-            // Cannot parse args
-            case Result.Failure(msg) =>
-              streams.err.println(msg)
-              (false, RunnerState.empty)
+    SystemStreams.withStreams(streams) {
+      os.SubProcess.env.withValue(env) {
+        MillCliConfigParser.parse(args) match {
+          // Cannot parse args
+          case Result.Failure(msg) =>
+            streams.err.println(msg)
+            (false, RunnerState.empty)
 
-            case Result.Success(config) if config.help.value =>
-              streams.out.println(MillCliConfigParser.longUsageText)
-              (true, RunnerState.empty)
+          case Result.Success(config) if config.help.value =>
+            streams.out.println(MillCliConfigParser.longUsageText)
+            (true, RunnerState.empty)
 
-            case Result.Success(config) if config.showVersion.value =>
-              def prop(k: String) = System.getProperty(k, s"<unknown $k>")
+          case Result.Success(config) if config.showVersion.value =>
+            def prop(k: String) = System.getProperty(k, s"<unknown $k>")
 
-              val javaVersion = prop("java.version")
-              val javaVendor = prop("java.vendor")
-              val javaHome = prop("java.home")
-              val fileEncoding = prop("file.encoding")
-              val osName = prop("os.name")
-              val osVersion = prop("os.version")
-              val osArch = prop("os.arch")
-              streams.out.println(
-                s"""Mill Build Tool version ${BuildInfo.millVersion}
-                   |Java version: $javaVersion, vendor: $javaVendor, runtime: $javaHome
-                   |Default locale: ${Locale.getDefault()}, platform encoding: $fileEncoding
-                   |OS name: "$osName", version: $osVersion, arch: $osArch""".stripMargin
-              )
-              (true, RunnerState.empty)
+            val javaVersion = prop("java.version")
+            val javaVendor = prop("java.vendor")
+            val javaHome = prop("java.home")
+            val fileEncoding = prop("file.encoding")
+            val osName = prop("os.name")
+            val osVersion = prop("os.version")
+            val osArch = prop("os.arch")
+            streams.out.println(
+              s"""Mill Build Tool version ${BuildInfo.millVersion}
+                 |Java version: $javaVersion, vendor: $javaVendor, runtime: $javaHome
+                 |Default locale: ${Locale.getDefault()}, platform encoding: $fileEncoding
+                 |OS name: "$osName", version: $osVersion, arch: $osArch""".stripMargin
+            )
+            (true, RunnerState.empty)
 
-            case Result.Success(config)
+          case Result.Success(config)
               if (
                 config.interactive.value || config.noServer.value || config.bsp.value
-                ) && streams.in.getClass == classOf[PipedInputStream] =>
-              // because we have stdin as dummy, we assume we were already started in server process
-              streams.err.println(
-                "-i/--interactive/--no-server/--bsp must be passed in as the first argument"
-              )
-              (false, RunnerState.empty)
+              ) && streams.in.getClass == classOf[PipedInputStream] =>
+            // because we have stdin as dummy, we assume we were already started in server process
+            streams.err.println(
+              "-i/--interactive/--no-server/--bsp must be passed in as the first argument"
+            )
+            (false, RunnerState.empty)
 
-            case Result.Success(config)
+          case Result.Success(config)
               if Seq(
                 config.interactive.value,
                 config.noServer.value,
                 config.bsp.value
               ).count(identity) > 1 =>
-              streams.err.println(
-                "Only one of -i/--interactive, --no-server or --bsp may be given"
-              )
-              (false, RunnerState.empty)
+            streams.err.println(
+              "Only one of -i/--interactive, --no-server or --bsp may be given"
+            )
+            (false, RunnerState.empty)
 
-            // Check non-negative --meta-level option
-            case Result.Success(config) if config.metaLevel.exists(_ < 0) =>
-              streams.err.println("--meta-level cannot be negative")
-              (false, RunnerState.empty)
+          // Check non-negative --meta-level option
+          case Result.Success(config) if config.metaLevel.exists(_ < 0) =>
+            streams.err.println("--meta-level cannot be negative")
+            (false, RunnerState.empty)
 
-            case Result.Success(config) =>
-              val noColorViaEnv = env.get("NO_COLOR").exists(_.nonEmpty)
-              val colored = config.color.getOrElse(mainInteractive && !noColorViaEnv)
-              val colors =
-                if (colored) mill.internal.Colors.Default else mill.internal.Colors.BlackWhite
+          case Result.Success(config) =>
+            val noColorViaEnv = env.get("NO_COLOR").exists(_.nonEmpty)
+            val colored = config.color.getOrElse(mainInteractive && !noColorViaEnv)
+            val colors =
+              if (colored) mill.internal.Colors.Default else mill.internal.Colors.BlackWhite
 
-              if (!config.silent.value) {
-                checkMillVersionFromFile(WorkspaceRoot.workspaceRoot, streams.err)
-              }
+            if (!config.silent.value) {
+              checkMillVersionFromFile(WorkspaceRoot.workspaceRoot, streams.err)
+            }
 
-              // special BSP mode, in which we spawn a server and register the current evaluator when-ever we start to eval a dedicated command
-              val bspMode = config.bsp.value && config.leftoverArgs.value.isEmpty
-              val maybeThreadCount =
-                parseThreadCount(config.threadCountRaw, Runtime.getRuntime.availableProcessors())
+            // special BSP mode, in which we spawn a server and register the current evaluator when-ever we start to eval a dedicated command
+            val bspMode = config.bsp.value && config.leftoverArgs.value.isEmpty
+            val maybeThreadCount =
+              parseThreadCount(config.threadCountRaw, Runtime.getRuntime.availableProcessors())
 
-              val (success, nextStateCache) = {
-                if (config.repl.value) {
-                  streams.err.println("The --repl mode is no longer supported.")
+            val (success, nextStateCache) = {
+              if (config.repl.value) {
+                streams.err.println("The --repl mode is no longer supported.")
+                (false, stateCache)
+
+              } else if (!bspMode && config.leftoverArgs.value.isEmpty) {
+                println(MillCliConfigParser.shortUsageText)
+
+                (true, stateCache)
+
+              } else if (maybeThreadCount.errorOpt.isDefined) {
+                streams.err.println(maybeThreadCount.errorOpt.get)
+                (false, stateCache)
+
+              } else {
+                val userSpecifiedProperties =
+                  userSpecifiedProperties0 ++ config.extraSystemProperties
+
+                val threadCount = Some(maybeThreadCount.toOption.get)
+
+                if (maybeScalaCompilerWorker.isInstanceOf[Result.Failure]) {
+                  val err = maybeScalaCompilerWorker.errorOpt.get
+                  streams.err.println(err)
                   (false, stateCache)
-
-                } else if (!bspMode && config.leftoverArgs.value.isEmpty) {
-                  println(MillCliConfigParser.shortUsageText)
-
-                  (true, stateCache)
-
-                } else if (maybeThreadCount.errorOpt.isDefined) {
-                  streams.err.println(maybeThreadCount.errorOpt.get)
-                  (false, stateCache)
-
                 } else {
-                  val userSpecifiedProperties =
-                    userSpecifiedProperties0 ++ config.extraSystemProperties
+                  val scalaCompilerWorker = maybeScalaCompilerWorker.get
+                  val bspContext =
+                    if (bspMode) Some(new BspContext(streams, bspLog, config.home)) else None
 
-                  val threadCount = Some(maybeThreadCount.toOption.get)
+                  val bspCmd = "mill.bsp.BSP/startSession"
+                  val targetsAndParams =
+                    bspContext
+                      .map(_ => Seq(bspCmd))
+                      .getOrElse(config.leftoverArgs.value.toList)
 
-                  if (maybeScalaCompilerWorker.isInstanceOf[Result.Failure]) {
-                    val err = maybeScalaCompilerWorker.errorOpt.get
-                    streams.err.println(err)
-                    (false, stateCache)
-                  } else {
-                    val scalaCompilerWorker = maybeScalaCompilerWorker.get
-                    val bspContext =
-                      if (bspMode) Some(new BspContext(streams, bspLog, config.home)) else None
+                  val out = os.Path(OutFiles.out, WorkspaceRoot.workspaceRoot)
 
-                    val bspCmd = "mill.bsp.BSP/startSession"
-                    val targetsAndParams =
-                      bspContext
-                        .map(_ => Seq(bspCmd))
-                        .getOrElse(config.leftoverArgs.value.toList)
+                  var repeatForBsp = true
+                  var loopRes: (Boolean, RunnerState) = (false, RunnerState.empty)
+                  while (repeatForBsp) {
+                    repeatForBsp = false
 
-                    val out = os.Path(OutFiles.out, WorkspaceRoot.workspaceRoot)
+                    Using.resource(new TailManager(serverDir)) { tailManager =>
+                      if (config.watch.value) {
+                        // When starting a --watch, clear the `mill-selective-execution.json`
+                        // file, so that the first run always selects everything and only
+                        // subsequent re-runs are selective depending on what changed.
+                        os.remove(out / OutFiles.millSelectiveExecution)
+                      }
+                      val (isSuccess, evalStateOpt) = Watching.watchLoop(
+                        ringBell = config.ringBell.value,
+                        watch = config.watch.value,
+                        streams = streams,
+                        setIdle = setIdle,
+                        evaluate = (enterKeyPressed: Boolean, prevState: Option[RunnerState]) => {
+                          adjustJvmProperties(userSpecifiedProperties, initialSystemProperties)
 
-                    var repeatForBsp = true
-                    var loopRes: (Boolean, RunnerState) = (false, RunnerState.empty)
-                    while (repeatForBsp) {
-                      repeatForBsp = false
-
-                      Using.resource(new TailManager(serverDir)) { tailManager =>
-                        if (config.watch.value) {
-                          // When starting a --watch, clear the `mill-selective-execution.json`
-                          // file, so that the first run always selects everything and only
-                          // subsequent re-runs are selective depending on what changed.
-                          os.remove(out / OutFiles.millSelectiveExecution)
-                        }
-                        val (isSuccess, evalStateOpt) = Watching.watchLoop(
-                          ringBell = config.ringBell.value,
-                          watch = config.watch.value,
-                          streams = streams,
-                          setIdle = setIdle,
-                          evaluate = (enterKeyPressed: Boolean, prevState: Option[RunnerState]) => {
-                            adjustJvmProperties(userSpecifiedProperties, initialSystemProperties)
-
-                            withOutLock(
-                              config.noBuildLock.value || bspContext.isDefined,
-                              config.noWaitForBuildLock.value,
-                              out,
-                              targetsAndParams,
-                              streams
-                            ) {
-                              Using.resource(getLogger(
-                                streams,
-                                config,
-                                mainInteractive,
-                                enableTicker =
-                                  config.ticker
-                                    .orElse(config.enableTicker)
-                                    .orElse(Option.when(config.disableTicker.value)(false)),
-                                printLoggerState,
-                                serverDir,
-                                colored = colored,
-                                colors = colors
-                              )) { logger =>
-                                // Enter key pressed, removing mill-selective-execution.json to
-                                // ensure all tasks re-run even though no inputs may have changed
-                                if (enterKeyPressed) os.remove(out / OutFiles.millSelectiveExecution)
-                                SystemStreams.withStreams(logger.systemStreams) {
-                                  tailManager.withOutErr(logger.outputStream, logger.errorStream) {
-                                    new MillBuildBootstrap(
-                                      projectRoot = WorkspaceRoot.workspaceRoot,
-                                      output = out,
-                                      home = config.home,
-                                      keepGoing = config.keepGoing.value,
-                                      imports = config.imports,
-                                      env = env,
-                                      threadCount = threadCount,
-                                      targetsAndParams = targetsAndParams,
-                                      prevRunnerState = prevState.getOrElse(stateCache),
-                                      logger = logger,
-                                      needBuildFile = needBuildFile(config),
-                                      requestedMetaLevel = config.metaLevel,
-                                      config.allowPositional.value,
-                                      systemExit = systemExit,
-                                      streams0 = streams0,
-                                      selectiveExecution = config.watch.value,
-                                      scalaCompilerWorker = scalaCompilerWorker
-                                    ).evaluate()
-                                  }
+                          withOutLock(
+                            config.noBuildLock.value || bspContext.isDefined,
+                            config.noWaitForBuildLock.value,
+                            out,
+                            targetsAndParams,
+                            streams
+                          ) {
+                            Using.resource(getLogger(
+                              streams,
+                              config,
+                              mainInteractive,
+                              enableTicker =
+                                config.ticker
+                                  .orElse(config.enableTicker)
+                                  .orElse(Option.when(config.disableTicker.value)(false)),
+                              printLoggerState,
+                              serverDir,
+                              colored = colored,
+                              colors = colors
+                            )) { logger =>
+                              // Enter key pressed, removing mill-selective-execution.json to
+                              // ensure all tasks re-run even though no inputs may have changed
+                              if (enterKeyPressed) os.remove(out / OutFiles.millSelectiveExecution)
+                              SystemStreams.withStreams(logger.systemStreams) {
+                                tailManager.withOutErr(logger.outputStream, logger.errorStream) {
+                                  new MillBuildBootstrap(
+                                    projectRoot = WorkspaceRoot.workspaceRoot,
+                                    output = out,
+                                    home = config.home,
+                                    keepGoing = config.keepGoing.value,
+                                    imports = config.imports,
+                                    env = env,
+                                    threadCount = threadCount,
+                                    targetsAndParams = targetsAndParams,
+                                    prevRunnerState = prevState.getOrElse(stateCache),
+                                    logger = logger,
+                                    needBuildFile = needBuildFile(config),
+                                    requestedMetaLevel = config.metaLevel,
+                                    config.allowPositional.value,
+                                    systemExit = systemExit,
+                                    streams0 = streams0,
+                                    selectiveExecution = config.watch.value,
+                                    scalaCompilerWorker = scalaCompilerWorker
+                                  ).evaluate()
                                 }
                               }
                             }
-                          },
-                          colors = colors
-                        )
-                        bspContext.foreach { ctx =>
-                          repeatForBsp =
-                            BspContext.bspServerHandle.lastResult == Some(
-                              BspServerResult.ReloadWorkspace
-                            )
-                          streams.err.println(
-                            s"`$bspCmd` returned with ${BspContext.bspServerHandle.lastResult}"
-                          )
-                        }
-
-                        loopRes = (isSuccess, evalStateOpt)
-                      }
-                    } // while repeatForBsp
-                    bspContext.foreach { ctx =>
-                      streams.err.println(
-                        s"Exiting BSP runner loop. Stopping BSP server. Last result: ${BspContext.bspServerHandle.lastResult}"
+                          }
+                        },
+                        colors = colors
                       )
-                      BspContext.bspServerHandle.stop()
+                      bspContext.foreach { ctx =>
+                        repeatForBsp =
+                          BspContext.bspServerHandle.lastResult == Some(
+                            BspServerResult.ReloadWorkspace
+                          )
+                        streams.err.println(
+                          s"`$bspCmd` returned with ${BspContext.bspServerHandle.lastResult}"
+                        )
+                      }
+
+                      loopRes = (isSuccess, evalStateOpt)
                     }
-
-                    // return with evaluation result
-                    loopRes
+                  } // while repeatForBsp
+                  bspContext.foreach { ctx =>
+                    streams.err.println(
+                      s"Exiting BSP runner loop. Stopping BSP server. Last result: ${BspContext.bspServerHandle.lastResult}"
+                    )
+                    BspContext.bspServerHandle.stop()
                   }
-                }
-              }
-              if (config.ringBell.value) {
-                if (success) println("\u0007")
-                else {
-                  println("\u0007")
-                  Thread.sleep(250)
-                  println("\u0007")
-                }
-              }
-              (success, nextStateCache)
 
-          }
+                  // return with evaluation result
+                  loopRes
+                }
+              }
+            }
+            if (config.ringBell.value) {
+              if (success) println("\u0007")
+              else {
+                println("\u0007")
+                Thread.sleep(250)
+                println("\u0007")
+              }
+            }
+            (success, nextStateCache)
+
         }
       }
     }

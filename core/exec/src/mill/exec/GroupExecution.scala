@@ -263,20 +263,49 @@ private trait GroupExecution {
               }
             }
           }
+          val defaultMapping: Seq[(os.Path, os.Path)] = Seq(
+            mill.api.WorkspaceRoot.workspaceRoot -> os.root / "mill-workspace",
+            os.home -> os.root / "mill-home"
+          )
+
+          def mapPathPrefixes(path: os.Path, mapping: Seq[(os.Path, os.Path)]): os.Path = {
+            mapping
+              .collectFirst { case (from, to) if path.startsWith(from) => to / path.subRelativeTo(from) }
+              .getOrElse(path)
+          }
+
+          def normalizePath(path: os.Path): os.Path = mapPathPrefixes(path, defaultMapping)
+
+          def denormalizePath(path: os.Path): os.Path = mapPathPrefixes(path, defaultMapping.map(_.swap))
+
+          object millPathSerializer extends os.Path.Serializer {
+            def serializeString(p: os.Path): String = os.Path.defaultPathSerializer.serializeString(normalizePath(p))
+            def serializeFile(p: os.Path): java.io.File = os.Path.defaultPathSerializer.serializeFile(normalizePath(p))
+            def serializePath(p: os.Path): java.nio.file.Path = os.Path.defaultPathSerializer.serializePath(normalizePath(p))
+            def deserialize(s: String) = denormalizePath(os.Path(os.Path.defaultPathSerializer.deserialize(s))).wrapped
+            def deserialize(s: java.io.File) =  denormalizePath(os.Path(os.Path.defaultPathSerializer.deserialize(s))).wrapped
+            def deserialize(s: java.nio.file.Path) =  denormalizePath(os.Path(os.Path.defaultPathSerializer.deserialize(s))).wrapped
+            def deserialize(s: java.net.URI) =  denormalizePath(os.Path(os.Path.defaultPathSerializer.deserialize(s))).wrapped
+          }
+
           def wrap[T](t: => T): T = {
             val (streams, destFunc) =
               if (exclusive) (exclusiveSystemStreams, () => workspace)
               else (multiLogger.systemStreams, () => makeDest())
 
-            os.dynamicPwdFunction.withValue(destFunc) {
-              os.checker.withValue(executionChecker) {
-                SystemStreams.withStreams(streams) {
-                  val exposedEvaluator = if (!exclusive) null else getEvaluator()
-                  Evaluator.currentEvaluator0.withValue(exposedEvaluator) {
-                    if (!exclusive) t
-                    else {
-                      logger.reportKey(Seq(counterMsg))
-                      logger.withPromptPaused { t }
+            os.Path.pathSerializer.withValue(os.Path.defaultPathSerializer) {
+              os.dynamicPwdFunction.withValue(destFunc) {
+                os.checker.withValue(executionChecker) {
+                  SystemStreams.withStreams(streams) {
+                    val exposedEvaluator = if (!exclusive) null else getEvaluator()
+                    Evaluator.currentEvaluator0.withValue(exposedEvaluator) {
+                      if (!exclusive) t
+                      else {
+                        logger.reportKey(Seq(counterMsg))
+                        logger.withPromptPaused {
+                          t
+                        }
+                      }
                     }
                   }
                 }
