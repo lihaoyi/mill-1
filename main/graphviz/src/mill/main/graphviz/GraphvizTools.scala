@@ -13,7 +13,7 @@ import scala.concurrent.{Await, ExecutionContext, Future, duration}
 
 object GraphvizTools {
 
-  def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = os.Path.pathSerializer.withValue(new mill.internal.MillPathSerializer(Seq(os.pwd -> os.sub))) {
     val executor = Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors())
 
     val threadLocalJsEngines =

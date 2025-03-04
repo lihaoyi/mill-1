@@ -100,6 +100,8 @@ final class EvaluatorImpl private[mill] (
 
   object SetupSymlinkSpawnHook extends (os.Path => Unit) {
     def apply(p: os.Path): Unit = MillPathSerializer.setupSymlinks(p, workspace)
+
+    override def toString(): String = "SetupSymlinkSpawnHook"
   }
 
   /**
