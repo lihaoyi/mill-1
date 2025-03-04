@@ -553,7 +553,7 @@ class ZincWorkerImpl(
     // No need to utilize more than 8 cores to serialize a small file
     val parallelism = math.min(Runtime.getRuntime.availableProcessors(), 8)
 
-    if (true || System.getenv("MILL_TEST_TEXT_ANALYSIS_STORE") != null) {
+    if (true) {
       ConsistentFileAnalysisStore
         .text(file = path.toIO, mappers = mappers, reproducible = true, parallelism = parallelism)
     } else {
