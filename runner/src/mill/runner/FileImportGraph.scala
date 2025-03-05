@@ -117,7 +117,6 @@ object FileImportGraph {
             val (pkgs, stmts) = splitted
             val importSegments = pkgs.mkString(".")
 
-            mill.constants.DebugLog.println("s " + s)
             val expectedImportSegments0 =
               Seq(rootModuleAlias) ++
                 os.followLink(s / os.up).getOrElse(s / os.up).relativeTo(projectRoot).segments
