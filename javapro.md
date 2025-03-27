@@ -5,7 +5,7 @@ or Gradle don't always live up to that reputation. This article will explore wha
 where current Java build tools fall short in performance, extensibility, and IDE experience,
 and the reasons to believe that we can do better. We will end with a demonstration of an 
 experimental build tool "Mill" that makes use of these ideas, proving out the idea that Java
-build tooling has the potential to be much faster, safer, and easier than it is today.
+build tooling has the potential to be much faster and easier to use than it is today.
 
 --------------------------------------------------------------------------------
 
@@ -13,13 +13,15 @@ build tooling has the potential to be much faster, safer, and easier than it is 
 
 Build tools like Maven and Gradle have been staples of the JVM ecosystem for decades now.
 Countless developers have used these tools to build projects large and small, so they 
-clearly work for the tasks they are used for. However, just because something _works_ 
+clearly work for the tasks they are used for. However, just because something works 
 doesn't mean that there isn't room to improve! There are three main areas that these 
 Java build tools typically fall short:
 
 1. IDE Experience
 2. Extensibility
 3. Performance
+
+We will discuss each one in turn.
 
 ### IDE Experience
 
@@ -30,31 +32,32 @@ a Maven `pom.xml` file:
 ![IntellijNettyMaven1.png](docs/modules/ROOT/images/comparisons/IntellijNettyMaven1.png)
 
 If you already familiar with the various plugins involved and have already memorized how
-they are configured, this snippet makes perfect sense. However, in the real world developers
-are often working with partial information, and may not be familiar enough with every single
-tool or plugin to be able to instantly recall how they are configured and used. That is where
-IDEs are meant to come in: assisting the developer by letting them pull up the documentation
-or implementation of APIs they may be unfamiliar with, so they can quickly learn what the API
-does and how it can be used to accomplish their goals. 
+they are configured, this snippet makes perfect sense. However, in the real world things
+are not always quite so neat, and a developer may not be familiar enough with every single
+tool or plugin to be able to instantly recall how they are configured and used. Sometimes
+mistakes are made and the developer has to dig deep to investigate a bug or misbehavior. That
+is where IDEs come in: they assist the developer by instantly pulling up the documentation
+or implementation of APIs they may be unfamiliar with, so they can quickly learn what 
+something does and how it can be used to accomplish their goals. 
 
-However, if you try to use the normal IDE _"jump to definition"_ on this Maven `pom.xml` 
+However, if you try to use the Intellij IDE's _jump to definition_ on this Maven `pom.xml` 
 snippet, it brings you to this:
 
 ![IntellijNettyMaven2.png](docs/modules/ROOT/images/comparisons/IntellijNettyMaven2.png)
 
-To be clear, this result is useful: we now know that `sources` has the type
-`java.io.File[]`, it is `required`, and it is documented as `Additional source directories`.
-However, the next question a developer asks is always the same: how is `sources` used
-by the plugin? How do changes in `sources` end up influencing the behavior of the system,
-in this case the build tool? If I as a developer need to debug an issue in the local build
-or the upstream plugin, these are common questions to ask. 
+This is the signature of the `sources` configuration value: we now know that `sources` has the
+type`java.io.File[]`, it is `required`, and it is documented as `Additional source directories`.
+If that is all you need then great, but sometimes it isn't. If I as a developer need to debug 
+an issue in the local build or the upstream plugin, I may need to ask follow ups:
+how is `sources` used by the plugin? How do changes in `sources` end up influencing the 
+behavior of the system, in this case the build tool?  
 
 In application code, you can almost always use your IDE's _jump to the definition_, 
 _find usages_, or other code navigation tools to explore and understand the underlying
 logic, but these tools are conspicuously absent when working with build tool config files.
 As a result you often end up re-reading the documentation for the Nth time, digging through
 Stackoverflow, or copy-pasting from other local examples. While this can help, it is much
-more time-consuming and error-prone than being able to explore the codebase in your IDE.
+more time-consuming and error-prone than being able to explore the system in your IDE.
 
 This problem is not unique to Maven and it's `pom.xml`; Gradle suffers the same problem. 
 For example, let's say you looked at the following code and weren't 100% sure what
@@ -78,9 +81,13 @@ will receive a screenful of de-compiled bytecode
 Not only is the de-compiled code missing all javadoc and comments and other niceties, but
 there is a more fundamental problem: the code is a simple _getter_ and _setter_! All you know
 is that _someone_ is _setting_ this mutable variable, and _someone_ is _getting_ it, but these
-could be happening anywhere in the huge Gradle codebase.
+could be happening anywhere in the huge Gradle codebase, any of the third-party plugins you use,
+or anywhere in your own code. Although your IDE nominally lets you _jump to definition_ in 
+your Gradle build files, in practice it often isn't helpful in figuring out where the values 
+actually come from.
 
-While the Gradle example above is in Groovy, the experience with Gradle Kotlin is similar.
+While the Gradle example above is in Groovy, the experience with Gradle Kotlin is similar,
+despite Kotlin being a language with excellent IDE support in most other scenarios.
 
 The reason there is untapped potential here is that this is _not_ the IDE experience that
 someone expects from a JVM project! If I open a random Java file in any Java project, I expect
@@ -96,8 +103,13 @@ the program:
 ![NettyJava2.png](NettyJava2.png)
 
 In a typical Java setup, this seamless _jump-to-definition_ and _find usages_ works 
-throughout: your own code, third-party libraries, standard libraries, and so on. But 
-somehow that experience does not translate to build tools. Can build tools do better?
+throughout: your own code, third-party libraries, standard libraries, and so on. You
+can use this to get a deep understanding of any codebase quickly and conveniently in 
+your IDE. But somehow that experience does not translate to build tools, and it is 
+common to find yourself Google-ing for answers, reading and re-reading online docs that are
+always somehow not quite enough, and digging through plugin source code on Github. 
+Can build tools do better, to really match the seamless IDE experience that Java
+developers are used to?
 
 ### Extensibility 
 
@@ -109,7 +121,7 @@ consider a simple requirement:
 - _"Count the number of lines of code in the project and save it in a line-count.txt resource file"_
 
 While this requirement may be contrived and arbitrary, it is representative of the many
-idiosyncratic things that any real-world project needs. Custom linters, custom deployment
+arbitrary things that any real-world project needs. Custom linters, custom deployment
 artifacts, custom BOM metadata, etc. are all things that real world build systems need
 to support. "counting the lines and saving it" is just the "hello world" version of these
 common real-world build customizations
@@ -145,16 +157,17 @@ For example, in Maven you may come up with:
 ```
 
 This snippet uses the `exec-maven-plugin` to count the lines of code using shell command
-`find src -name '*.java' | xargs wc -l > line-count.txt` This works, but there's a lot of
+`find src -name '*.java' | xargs wc -l > line-count.txt`. This works, but there's a lot of
 subtlety and trickiness around it:
 
-1. You have to escape the `&&` as `&amp;&amp;` in XML in order to make it parse correctly
-2. `find` only works on Mac and Linux; this won't work on Windows
-3. What happens if some source files live outside of `src/`, e.g. Generated source files in `target/`?
+1. You have to make sure to use `&&` rather than `;`, or `set -e`, otherwise errors may be silently ignored
+2. You have to escape the `&&` as `&amp;&amp;` in XML in order to make it parse correctly
+3. `find` only works on Mac and Linux, so this config as-written won't work on Windows
+4. What happens if some source files live outside of `src/`, e.g. Generated source files in `target/`?
 
-You can also implement this in Gradle, and it looks something like the following:
+You can also implement this line-count logic in Gradle, and it looks something like the following:
 
-```groovy
+```kotlin
 import java.io.File
 
 tasks.register("generateLineCount") {
@@ -196,24 +209,27 @@ there are other issues:
    of this tasks if e.g. `src/main/resources/` changes
 
 2. You need to remember to add the `dependsOn` clause in `processResources`, otherwise
-   you will find `generateLineCount` not running when it should.
+   you will find `generateLineCount` not re-running when it should resulting in a stale 
+   `line-count.txt`.
 
-3. You need to make sure `src/main/java` is actually where the sources live! What if 
+3. Again, `src/main/java` is not the only place where sources live! What if 
    it's actually `src/main/kotlin`? What about generated sources in `target/`
 
 The above code has a bug that can cause the `line-count.txt` to be spuriously re-computed
-if `.java` files not in `src/main/java` are modified. Can you spot it?
+if some files not in `src/main/java` are modified. Can you spot it?
 
-In general, the bugs in the Gradle case won't come from the line count logic.
-Rather, they would come from how this piece of code integrates with the rest of Gradle:
+In general, the bugs in the Gradle case won't come from the line count logic:
+The `sourceDirs.map(::file)`, `walkTopDown`, `totalLines += file.readLines().size` 
+section is verbose but straightforward.
+Rather, bugs would come from how this piece of code integrates with the rest of Gradle:
 the registration of tasks, registration of task dependencies, registration of input
-files and output files, all of which are done manually and can easily fall out of sync.
+files and output files, all of which are done manually and be easily fat-fingered or
+fall out of sync as the code changes over time.
 
 What is notable about "count lines and save it to a file" requirement is that it is 
 _entirely trivial_. Any first-year programming student should be able to write it,
 and any professional programmer should be able to bang it out in their language 
-of choice in about 30 seconds, and have it work robustly across operating systems
-and in the presence of incremental builds and parallelism. But the build tools like
+of choice in about 30 seconds and have it work flawlessly. But the build tools like
 Maven or Gradle make this trivial task decidedly non-trivial. That's not to say it's 
 _impossible_, but it's a lot harder than such a simple task should be!
 
@@ -223,11 +239,11 @@ The last area to discuss here is performance. Java is a very performant language
 Java compiler written in Java is also very fast. But no Java build tool seems to
 be able to surface that speed to the developer.
 
-For example, consider the time taken to clean compile a single module in the 500kLOC Netty 
+For example, consider the time taken to clean compile a single module, `common`, in the 500kLOC Netty 
 codebase
 
 ```bash
->  ./mvnw clean; time ./mvnw -pl common -Pfast compile
+> ./mvnw clean; time ./mvnw -pl common -Pfast compile
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD SUCCESS
 [INFO] ------------------------------------------------------------------------
@@ -260,7 +276,7 @@ compilation speeds.
 
 In isolation that number seems fine: ~6s to compile a single moderately-sized module, ~100s
 to compile the entire project (this drops to ~50s if we parallelize it with `-T10`). But it's
-worth asking: how fast _should_ Java code compile?
+worth asking, how fast _should_ Java code compile?
 
 It turns out, Java compiles a lot faster than 5kLOC per second! If we go back to the `common`
 module we looked at earlier, and try compiling it directly with `javac` rather than going
@@ -379,11 +395,11 @@ at ~20kLOC/s, `javac` run in-memory and allowed to get hot compiles at almost ~1
 If we repeat this exercise with Gradle, using the Mockito codebase as an example, we get 
 similar results, which I tabulated below
 
-| Mockito Core | Time | Compiler lines/s | Slowdown | Netty Common | Time | Compiler lines/s | Slowdown |
-|--------------|------|------------------|----------|--------------|------|------------------|----------|
-| Javac Hot | 0.36s | 115,600 | 1.0x | Javac Hot | 0.29s | 117,500 | 1.0x |
-| Javac Cold | 1.29s | 32,200 | 4.4x | Javac Cold | 1.48s | 20,100 | 5.1x |
-| Gradle | 4.41s | 9,400 | 15.2x | Maven | 4.89s | 4,800 | 21.2x |
+| Mockito Core | Time | Compiler lines/s | Slowdown | Netty Common | Time  | Compiler lines/s | Slowdown |
+|--------------|------|------------------|----------|--------------|-------|------------------|----------|
+| Javac Hot | 0.36s | 115,600 | 1.0x | Javac Hot | 0.25s | 117,500 | 1.0x     |
+| Javac Cold | 1.29s | 32,200 | 4.4x | Javac Cold | 1.48s | 20,100 | 5.1x     |
+| Gradle | 4.41s | 9,400 | 15.2x | Maven | 6.15s | 4,800 | 24.6x    |
 
 So Maven and Gradle actually compile Java code 15-20x slower than `javac` itself is able
 to do so! While Netty's ~500kLOC compiles in ~100s with Maven, it _should_ compile in 4-5s
@@ -395,8 +411,9 @@ really feel the slowness.
 ## The Mill Build Tool
 
 Mill is a fast, scalable, multi-language build tool that supports Java, Scala, Kotlin. 
-At its core, it does many of the same things as Maven or Gradle. You define a `build.mill`
-file (using Scala, rather than Groovy or Kotlin as Gradle does):
+At its core, it does many of the same things as Maven or Gradle, but tries hard to improve
+upon the IDE experience, extensibility, and performance issues described above. You define
+a `build.mill` file as below:
 
 
 ```scala
@@ -517,10 +534,10 @@ looked at earlier: IDE experience, extensibility, and performance:
 In terms of IDE experience, Mill has support in IDEs like IntelliJ or VSCode
 like Maven or Gradle do, but that support turns out to be much more useful. 
 
-Earlier, we looked a Maven build that configures some generated sources, and 
-saw how the IDE experience of exploring the configuration was shallow: it told
-us what types things were, but not how these configuration values were actually used.
-Mill's experience is different: for example, consider the following custom task that
+Earlier, we looked a Maven and Gradle build, and saw how the IDE experience of 
+exploring the configuration was shallow: it told us what types things were, but not 
+how these configuration values came from or how they were actually used. Mill's experience
+is different. For example, consider the following custom task that
 creates some generated sources:
 
 ![IntellijNettyPeekDocs.png](docs/modules/ROOT/images/comparisons/IntellijNettyPeekDocs.png)
@@ -552,6 +569,15 @@ your build tool in a way that other build tools like Maven or Gradle cannot, whi
 helps anyone who is trying to debug issues with their build and understand why it is acting
 the way it does.
 
+Perhaps the key insight here is that Mill tasks and configuration values are _just methods_!
+The Mill build is just made of methods calling other methods to form a call-graph, which
+Mill uses as the foundation for tasks calling other tasks forming a build-graph. And
+IDEs like IntelliJ or VSCode already know how to deal with method `def`s, method calls with `()`s,
+and even more advanced features like `override` and `super`. As far as your IDE is concerned
+your Mill build logic looks just like any application codebase made of methods calling 
+each other, and so the IDE can provide the same deep understanding and code navigation
+that it provides for any Java application codebase.
+
 ### Extensibility
 
 Most build tools require extensions to be written as plugins: you end up assembling
@@ -567,7 +593,7 @@ like this:
 object foo extends JavaModule {
   /** Total number of lines in module source files */
   def lineCount = Task {
-    allSourceFiles().map(f => os.read.lines(f.path).size).sum
+    foo.allSourceFiles().map(f => os.read.lines(f.path).size).sum
   }
 
   /** Generate resources using lineCount of sources */
@@ -582,18 +608,49 @@ One method `def` to compute the line count, another `override def` to replace re
 and that's it. We see the same the business logic here as in the Gradle/Kotlin example 
 earlier, perhaps slightly simplified (the `allSourceFiles()` method already handles
 the recursive listing of `.java` files for us so we don't need to repeat it here). 
+We can then use `./mill show foo.lineCount` to see the task's return value directly,
+or `./mill foo.run` to run the application code that makes use of the `line-count.txt`
+resource file:
+
+```bash
+> mill show foo.lineCount
+17
+
+> mill foo.run
+Line Count: 17
+```
+
 
 What's notable here is what we _don't_ see here: `doLast`, `dependsOn`, `inputs.files`,
-`outputs.files`, hard-coded references to paths like `"src/main/java"`. With Mill, you 
-just write the business logic of what your build tasks need to do: `def lineCount` reads the
-lines of each file and sums them up, `override def resources` writes out the `line-count.txt`
-file and adds a path reference to it to the resource path. All the manual work done in Gradle 
-to register task dependencies, register input-output files, decide when the task will run,
-etc. is all done automatically for you in Mill.
+`outputs.files`, hard-coded references to paths like `"src/main"` and `"src/main/java"`.
+With Mill, you just write the business logic of what your build tasks need to do: 
+`def lineCount` reads the lines of each file and sums them up, `override def resources` 
+writes out the `line-count.txt` file and adds a path reference to it to the resource path.
+All the manual work done in Gradle to register task dependencies, register input-output 
+files, decide when the task will run, etc. is all done automatically for you in Mill.
+And it is done with full IDE support, so if you're uncertain about what methods
+are available or what they do, your IDE is happily to provide real-time autocomplete
+and documentation to assist you:
 
-Mill even allows you to use any third-party JVM library from Maven Central as part of your
-build config. For example, let's say we had a new requirement that the `line-count.txt` should
-be rendered as a HTML string. Mill as a build tool does not come with HTML templating libraries
+![LineCountAutocomplete.png](LineCountAutocomplete.png)
+
+#### Build-time HTML Rendering
+
+Most Java applications use more than just the standard library to do their work, and 
+build systems are no different: you often need custom code-generators, IDL parsers, and 
+other third-party libraries in your build. Most build systems require these libraries to
+be bundled as plugins, which adds extra indirection and complexity (is there a plugin
+on Github? Does the plugin do everything I need? Is the plugin well maintained? Do I
+need to fork it or write my own plugin?) on top of the existing complexity of the
+underlying library. 
+
+Mill takes a different approach: you can directly use any third-party Java library
+as part of your Mill build. This removes a layer of indirection, and allows Java developers
+to directly use the same Java libraries they are familiar with without needing to first
+wrap them in a plugin or find an existing wrapper.
+
+For example, let's say we had a new requirement that the 
+`line-count.txt` should be rendered as a HTML string. Mill as a build tool does not come with HTML templating libraries
 built in, but it makes it very easy to import such libraries using the `import $ivy` syntax:
 
 ```scala
@@ -604,7 +661,7 @@ import org.thymeleaf.TemplateEngine
 import org.thymeleaf.context.Context
 object foo extends JavaModule {
    def lineCount = Task {
-      allSourceFiles().map(f => os.read.lines(f.path).size).sum
+     foo.allSourceFiles().map(f => os.read.lines(f.path).size).sum
    }
 
    def htmlSnippet = Task {
@@ -620,22 +677,158 @@ object foo extends JavaModule {
 }
 ```
 
-In this snippet, we `import $ivy` the `org.thymeleaf` library, which immediately makes
-it available in our build config. We can then directly `import org.thymeleaf.TemplateEngine`
-and `org.thymeleaf.context.Context` and use it just as we would use it in any Java application.
-In this example, we are using it to pre-render a `<h1>{lineCount}</h1>` html snippet in 
-`line-count.txt` for our application to use at runtime.
+In this snippet, we `import $ivy` the `org.thymeleaf:thymeleaf:3.1.1.RELEASE` library, which
+immediately makes it available in our build config. We can then directly 
+`import org.thymeleaf.TemplateEngine` and `org.thymeleaf.context.Context` and use it just as
+we would use it in any Java application. In this example, we are using it to pre-render a 
+`<h1>{lineCount}</h1>` html snippet in `line-count.txt` for our application to use at runtime.
+We can then use `./mill show` or `./mill foo.run` to see the value being generated and used at
+runtime:
 
-What's interesting about this example is that there are no plugins here: there is no
-`mill-thymeleaf-plugin` to integrate HTML rendering into your build pipeline, there is 
-no `mill-linecount-plugin` to count the lines of code, there is no `mill-generated-resources`
-plugin to generate resource files that can be read at runtime. Instead, Mill lets you 
-directly write code to do exactly what you want, using the common open source Java 
-libraries you already know how to use. This democratizes your build so that any Java
-developer can configure it, rather than being limited to those that hold the title
+```bash
+```bash
+> mill show foo.htmlSnippet
+"<h1>17</h1>"
+
+> mill foo.run
+Line Count: <h1>17</h1>
+```
+
+What's interesting about this example is that there are no plugins here: 
+
+- No `mill-thymeleaf-plugin` to integrate HTML rendering into your build pipeline
+- No `mill-linecount-plugin` to count the lines of code
+- No `mill-generated-resources` plugin to generate resource files that can be read at runtime.
+ 
+Instead, Mill lets you directly write code to do exactly what you want, using the common
+open source Java libraries you already know how to use. This democratizes your build
+so that any Java developer can configure it, rather than being limited to those that hold the title
 of "build tool expert" or "plugin author".
 
+#### Declarative vs Imperative Configuration
+
+The last thing worth mentioning on the topic of extensibility is the idea of "declarative"
+vs "imperative" builds: Maven using XML is usually thought of as "declarative", while
+Gradle is considered "imperative". But the line between the two is a lot blurrier than
+people realize. For example, consider again the Maven line-count implementation we saw
+earlier:
+
+```xml
+<plugin>
+    <groupId>org.codehaus.mojo</groupId>
+    <artifactId>exec-maven-plugin</artifactId>
+    <version>3.1.0</version>
+    <executions>
+        <execution>
+            <id>generate-line-count</id>
+            <phase>generate-resources</phase>
+            <goals>
+                <goal>exec</goal>
+            </goals>
+            <configuration>
+                <executable>sh</executable>
+                <arguments>
+                    <argument>-c</argument>
+                    <argument>
+                        mkdir -p target/generated-resources &amp;&amp;
+                        find src -name '*.java' | xargs wc -l > target/generated-resources/line-count.txt
+                    </argument>
+                </arguments>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+```
+
+While nominally a "declarative" XML config, it actually contains Bash code that is
+as imperative as any code ever written:
+
+```bash
+mkdir -p target/generated-resources &&
+find src -name '*.java' | xargs wc -l > target/generated-resources/line-count.txt
+```
+
+This imperative Bash code is functionally equivalent to the Mill configuration
+we saw earlier:
+
+```scala
+def lineCount = Task {
+  allSourceFiles().map(f => os.read.lines(f.path).size).sum
+}
+
+override def resources = Task {
+  os.write(Task.dest / "line-count.txt", "" + lineCount())
+  super.resources() ++ Seq(PathRef(Task.dest))
+}
+```
+
+And is also equivalent to part of the Gradle Kotlin code we saw:
+
+```kotlin
+sourceDirs.map(::file).filter { it.exists() }.forEach { srcDir ->
+    srcDir.walkTopDown()
+        .filter { it.isFile && it.extension in listOf("java") }
+        .forEach { file ->
+            totalLines += file.readLines().size
+        }
+}
+
+outputFile.asFile.writeText(totalLines.toString())
+```
+
+The lesson here is that build configuration does have some _intrinsic complexity_.
+There are things you want your build tool to do, and you need to somehow tell your
+build tool to do it. Whether you end up writing those instructions in a Maven Bash snippet,
+in Mill code, or Gradle Kotlin code, that logic needs to exist _somewhere_. Just
+because you wrap your imperative Bash script in a screenful of declarative XML does not
+make that Bash script any less imperative, or help mitigate the fragile and non-portable
+nature of the Bash language!
+
+This also calls into question why Gradle code is confusing. Common wisdom says that 
+Gradle code is confusing because it is imperative, but if you look at the Gradle snippet
+above it is no more complex than the Mill snippet or the Maven bash snippet: a student or
+junior developer should have no problems writing any of these snippets without error.
+The error-prone part of the Gradle configuration isn't the _business logic_ of counting
+lines of code, but the _plumbing_: manually registering input files, output files, task
+dependencies, and so on to make it fit into the Gradle framework:
+
+```kotlin
+import java.io.File
+
+tasks.register("generateLineCount") {
+    val sourceDirs = listOf("src/main/java")
+    val outputDir = layout.buildDirectory.dir("generated-resources")
+    val outputFile = outputDir.get().file("line-count.txt")
+
+    inputs.files(fileTree("src/main"))
+    outputs.file(outputFile)
+
+    doLast {
+        ...
+    }
+}
+
+tasks.named("processResources") {
+    dependsOn("generateLineCount")
+    from(layout.buildDirectory.dir("generated-resources"))
+}
+```
+
+While anyone can write a line-count program without issue, I would expect most developers to
+have to spend significant amounts of time Googling and poring over documentation to figure out
+how to write the snippet above, and even more time to convince themselves they have done it 
+correctly!
+
+Arguably the problem with Gradle isn't so much that the configuration is code: it is that
+the configuration is _very low-level code_ that forces the user to manually perform a lot of
+steps that are both tedious and easy to get wrong. So while Mill's build config is also
+code, the fact that it automates away all this tedious boilerplate makes the 
+`def lineCount` and `override def resources` Mill implementation easier to read
+and maintain than both the Maven and Gradle versions.
+
 ### Performance
+
+#### Compilation Performance
 
 Mill can compile the same Java module much faster than Maven or Gradle. For example,
 we can compile the Netty `common` module we discussed earlier via
@@ -658,17 +851,19 @@ Mill only matches the performance of `Javac Cold`, and still has significant
 overhead over `Javac Hot`, it is able to compile the same code much faster than 
 Maven or Gradle:
 
-| Mockito Core | Time | Compiler lines/s | Slowdown | Netty Common | Time | Compiler lines/s | Slowdown |
-|--------------|------|------------------|----------|--------------|------|------------------|----------|
-| Javac Hot | 0.36s | 115,600 | 1.0x | Javac Hot | 0.29s | 117,500 | 1.0x |
-| Javac Cold | 1.29s | 32,200 | 4.4x | Javac Cold | 1.48s | 20,100 | 5.1x |
-| Gradle | 4.41s | 9,400 | 15.2x | Maven | 4.89s | 4,800 | 21.2x |
-| *Mill* | *1.20s* | *34,700* | *4.1x* | *Mill* | *1.11s* | *26,800* | *3.8x* |
+| Mockito Core | Time      | Compiler lines/s | Slowdown | Netty Common | Time      | Compiler lines/s | Slowdown |
+|--------------|-----------|------------------|----------|--------------|-----------|------------------|----------|
+| Javac Hot    | 0.36s     | 115,600          | 1.0x     | Javac Hot    | 0.29s     | 117,500          | 1.0x     |
+| Javac Cold   | 1.29s     | 32,200           | 4.4x     | Javac Cold   | 1.48s     | 20,100           | 5.1x     |
+| Gradle       | 4.41s     | 9,400            | 15.2x    | Maven        | 6.15s     | 4,800            | 21.2x    |
+| **Mill**     | **1.20s** | **34,700**       | **4.1x** | **Mill**     | **1.11s** | **26,800**       | **3.8x** |
 
 Mill compiling the entire Netty codebase in ~23s on a single thread still does not 
 live up to the ~4-5s that extrapolating our single-module benchmarks would suggests,
 but is a significant ~4x improvement over Maven compiling the codebase in ~100s 
-on a single core!
+on a single core! Similarly, compiling Netty's `common` module in 1.11s is a big
+improvement over Maven compiling it in 6.15s, even if not quite as fast as `Javac Hot`
+compiling it in 0.29s.
 
 If we benchmark a variety of scenarios, we see that the speedup is pretty consistent
 regardless of whether you run on a single-thread or in parallel, whether you compile
@@ -693,24 +888,26 @@ seconds!
 | [Incremental Compile Single Module](https://mill-build.org/mill/main-branch/comparisons/gradle.html#_incremental_compile_single_module) | 1.37s | 0.20s | 6.9x |
 | [No-Op Compile Single Module](https://mill-build.org/mill/main-branch/comparisons/gradle.html#_no_op_compile_single_module) | 0.94s | 0.11s | 8.5x |
 
+#### Other Performance Features
+
 Compilation speed is just one aspect of a build tool's performance, and while it may 
 be the easiest to measure, it is by no means the most important. Mill
 
-- *--watch and re-run*: automatically re-run tests or services when code changes, 
+- **--watch and re-run**: automatically re-run tests or services when code changes, 
   saving time having to manually click the "run" button or tab back to your terminal
   to repeat a command
 
-- *Parallel Testing*: this lets you use all cores on your machine to speed up testing,
+- **Parallel Testing**: this lets you use all cores on your machine to speed up testing,
   which makes an enormous difference in today's multi-core world
 
-- *Selective Test Execution*: speeds up CI by only running tests affected by code being
+- **Selective Test Execution**: speeds up CI by only running tests affected by code being
   changed. This can cut hour-long PR validation down to minutes by skipping unrelated tests
 
-- *Incremental Assembly Jar Creation*: cuts down the creation of large assembly jars 
+- **Incremental Assembly Jar Creation**: cuts down the creation of large assembly jars 
   from 20s to 1s, which really speeds up workflows that use them (e.g. manual testing,
   or `spark-submit`)
 
-- *Automatic Parallel Profile Generation*: mill automatically generates profile files
+- **Automatic Parallel Profile Generation**: mill automatically generates profile files
   for every command, that you can load into your `chrome://tracing` profiler included in
   any chrome browser to visualize where the time in your build is being spent
 
@@ -721,13 +918,13 @@ be the easiest to measure, it is by no means the most important. Mill
 In this article, we have looked at the ways in which Java build tools like Maven and 
 Gradle fall short of Java's reputation as a performant and easy-to-use language with 
 great IDE support. While the performance, usability, and IDE integrations with these
-build tools are _usable_, they are not _great_, and are far from what you
+build tools are _ok_, they are not _great_, and are far from what you
 would expect working within the application code of any Java codebase.
 
-We then discussed the Mill build tool and how it is able to improve upon the shortcomings
+We then introduced the Mill build tool and how it is able to improve upon the shortcomings
 of tools like Maven or Gradle: 3-6x faster compiles, easier extensibility, and an IDE 
-experience that allows you to navigate your build logic just as easily as any application
-code. While there is still room to improve, it nevertheless shows a significant step up
+experience that allows you to navigate your build logic and as easily as any Java library.
+While there is still room to improve on all counts, it nevertheless shows a significant step up
 from tools like Maven or Gradle.
 
 JVM build tools definitely have a lot of room to improve. While Mill takes some baby steps
