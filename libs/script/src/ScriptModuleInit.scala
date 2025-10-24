@@ -52,7 +52,22 @@ private object ScriptModuleInit
       Option.when(os.isFile(millFile) || os.exists(millFile / "mill.yaml")) {
         Result.create {
           val parsedHeaderData = parseHeaderData(millFile)
-          val moduleDeps = parsedHeaderData.get("moduleDeps").map(_.arr.map(_.str)).getOrElse(Nil)
+          val rawModuleDeps = parsedHeaderData.get("moduleDeps").map(_.arr.map(_.str)).getOrElse(Nil)
+
+          // Transform module dependencies to handle relative paths
+          val moduleDeps = rawModuleDeps.map { depPath =>
+            if (depPath.startsWith("./") || depPath.startsWith("../")) {
+              // Resolve relative to the script's directory
+              val scriptDir = if (os.isFile(millFile)) millFile / os.up else millFile
+              val resolvedPath = scriptDir / os.RelPath(depPath)
+              // Make it relative to workspace for resolution
+              resolvedPath.relativeTo(workspace).toString
+            } else {
+              // Keep as-is for absolute (workspace-relative) paths
+              depPath
+            }
+          }
+
           val extendsConfig = parsedHeaderData.get("extends").map(_.str)
           moduleFor(millFile, extendsConfig, moduleDeps.toSeq, resolveModuleDep)
         }
