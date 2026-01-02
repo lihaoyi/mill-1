@@ -23,20 +23,7 @@ import scala.util.Using
 /**
  * Core configuration required to compile a single Scala module
  */
-trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase
-    with ScalaModuleApi { outer =>
-  // Keep in sync with ScalaModule.ScalaTests0, duplicated due to binary compatibility concerns
-  trait ScalaTests extends JavaTests with ScalaModule {
-    override def scalaOrganization: T[String] = outer.scalaOrganization()
-    override def scalaVersion: T[String] = outer.scalaVersion()
-    override def scalacPluginMvnDeps: T[Seq[Dep]] = outer.scalacPluginMvnDeps()
-    override def scalacPluginClasspath: T[Seq[PathRef]] = outer.scalacPluginClasspath()
-    override def scalaCompilerBridge: T[Option[PathRef]] = outer.scalaCompilerBridge()
-    override def scalacOptions: T[Seq[String]] = outer.scalacOptions()
-    override def mandatoryScalacOptions: T[Seq[String]] =
-      Task { super.mandatoryScalacOptions() }
-  }
-
+trait ScalaModule extends JavaModule with ScalaModuleApi { outer =>
 
   /**
    * What Scala organization to use
@@ -195,7 +182,7 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase
    * Command-line options to pass to the Scala compiler defined by the user.
    * Consumers should use `allScalacOptions` to read them.
    */
-  override def scalacOptions: T[Seq[String]] = Task { Seq.empty[String] }
+  def scalacOptions: T[Seq[String]] = Task { Seq.empty[String] }
 
   /**
    * Aggregation of all the options passed to the Scala compiler.
@@ -594,31 +581,6 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase
     super.manifest().add("Scala-Version" -> scalaVersion())
   }
 
-  @internal
-  override def bspBuildTarget: BspBuildTarget = super.bspBuildTarget.copy(
-    languageIds = Seq(
-      BspModuleApi.LanguageId.Java,
-      BspModuleApi.LanguageId.Scala
-    ),
-    canCompile = true,
-    canRun = true
-  )
-
-  @internal
-  override def bspBuildTargetData: Task[Option[(String, AnyRef)]] = Task.Anon {
-    Some((
-      "scala",
-      ScalaBuildTarget(
-        scalaOrganization = scalaOrganization(),
-        scalaVersion = scalaVersion(),
-        scalaBinaryVersion = JvmWorkerUtil.scalaBinaryVersion(scalaVersion()),
-        platform = ScalaPlatform.JVM,
-        jars = scalaCompilerClasspath().map(_.path.toURI.toString).iterator.toSeq,
-        jvmBuildTarget = Some(bspJvmBuildTargetTask())
-      )
-    ))
-  }
-
   override def semanticDbScalaVersion: T[String] = scalaVersion()
 
   override protected def semanticDbPluginClasspath = Task {
@@ -699,18 +661,6 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase
 }
 
 object ScalaModule {
-  // Keep in sync with ScalaModule#ScalaTests, duplicated due to binary compatibility concerns
-  trait ScalaTests0 extends JavaModule.JavaTests0 with ScalaModule {
-    private val outer = moduleDeps.head.asInstanceOf[ScalaModule]
-    override def scalaOrganization: T[String] = outer.scalaOrganization()
-    override def scalaVersion: T[String] = outer.scalaVersion()
-    override def scalacPluginMvnDeps: T[Seq[Dep]] = outer.scalacPluginMvnDeps()
-    override def scalacPluginClasspath: T[Seq[PathRef]] = outer.scalacPluginClasspath()
-    override def scalaCompilerBridge: T[Option[PathRef]] = outer.scalaCompilerBridge()
-    override def scalacOptions: T[Seq[String]] = outer.scalacOptions()
-    override def mandatoryScalacOptions: T[Seq[String]] = Task { super.mandatoryScalacOptions() }
-  }
-
   /**
    * Workaround for https://github.com/scala/scala3/issues/20421
    * Strips module-info.class from a classpath entry (jar or directory) to fix
