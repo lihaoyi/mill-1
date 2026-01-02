@@ -28,8 +28,4 @@ object `package` extends MillStableScalaModule {
   def compileMvnDeps = Seq(Deps.sonatypeCentralClient)
   def runMvnDeps = Seq(Deps.sonatypeCentralClient)
 
-  def testForkEnv = {
-    val locale = if (Properties.isMac) "en_US.UTF-8" else "C.utf8"
-    super.testForkEnv() ++ Map("LC_ALL" -> locale)
-  }
 }
