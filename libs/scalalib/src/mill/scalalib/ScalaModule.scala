@@ -1,6 +1,7 @@
 package mill
 package scalalib
 
+import mill.javalib.*
 import mill.util.JarManifest
 import mill.api.{BuildCtx, DummyInputStream, ModuleRef, PathRef, Result, Task}
 import mill.util.BuildInfo
@@ -36,12 +37,6 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase
       Task { super.mandatoryScalacOptions() }
   }
 
-  private[mill] override lazy val bspExt = {
-    ModuleRef(new mill.scalalib.bsp.BspScalaModule.Wrap(this) {}.internalBspJavaModule)
-  }
-  private[mill] override lazy val genIdeaInternalExt = {
-    ModuleRef(new mill.scalalib.idea.GenIdeaModule.Wrap(this) {}.internalGenIdea)
-  }
 
   /**
    * What Scala organization to use
