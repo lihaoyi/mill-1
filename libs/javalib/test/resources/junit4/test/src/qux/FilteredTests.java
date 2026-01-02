@@ -1,3 +1,0 @@
-package qux;
-
-interface FilteredTests {}

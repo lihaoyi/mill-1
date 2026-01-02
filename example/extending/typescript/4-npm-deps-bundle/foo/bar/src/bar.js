@@ -1,1 +1,0 @@
-var defaultRole = "Professor";

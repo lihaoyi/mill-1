@@ -1,2 +1,0 @@
-extends: [KotlinModule, ktfmt.KtfmtModule]
-kotlinVersion: "1.9.24"

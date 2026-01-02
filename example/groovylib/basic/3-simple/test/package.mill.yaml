@@ -1,3 +1,0 @@
-extends: [build.GroovyTests, TestModule.Junit5]
-mvnDeps:
-- org.apache.groovy:groovy-test:5.0.3

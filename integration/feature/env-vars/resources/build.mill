@@ -1,6 +1,0 @@
-package build
-import mill.*, javalib.*
-
-object foo extends JavaModule {
-  object test extends JavaTests, TestModule.Junit4 {}
-}

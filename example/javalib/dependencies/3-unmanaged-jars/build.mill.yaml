@@ -1,3 +1,0 @@
-extends: [JavaModule]
-unmanagedClasspath:
-- lib/nanojson-1.8.jar

@@ -1,4 +1,0 @@
-extends: [build.foo.ScalaTests]
-testFramework: utest.runner.Framework
-mvnDeps: [com.lihaoyi::utest:0.9.1]
-

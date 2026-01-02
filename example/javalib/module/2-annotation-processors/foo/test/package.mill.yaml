@@ -1,1 +1,0 @@
-extends: [build.foo.JavaTests, TestModule.Junit4]

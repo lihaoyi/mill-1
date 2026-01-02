@@ -1,8 +1,0 @@
-package build.runner
-
-/**
- * `runner/` contains the Mill code needed to bootstrap a `build.mill` programming
- * environment: downloading the JVM, downloading the necessary jar files via coursier,
- * spawning the client and server processes, and running the meta-build
- */
-object `package` extends mill.Module

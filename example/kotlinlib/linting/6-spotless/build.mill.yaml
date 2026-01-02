@@ -1,2 +1,0 @@
-extends: [KotlinModule, spotless.SpotlessModule]
-kotlinVersion: "2.1.20"

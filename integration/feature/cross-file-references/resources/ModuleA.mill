@@ -1,3 +1,0 @@
-package build
-
-trait ModuleA extends Module0

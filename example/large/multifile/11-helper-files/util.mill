@@ -1,8 +1,0 @@
-package build
-import mill.*, scalalib.*
-
-def myScalaVersion = "2.13.16"
-
-trait MyModule extends ScalaModule {
-  def scalaVersion = myScalaVersion
-}
