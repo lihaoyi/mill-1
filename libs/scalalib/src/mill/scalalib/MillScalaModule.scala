@@ -3,5 +3,5 @@ package mill.scalalib
 package millbuild
 
 trait MillScalaModule extends mill.scalalib.ScalaModule with MillJavaModule {
-  def foo = "bar2222"
+  def foo = "bar22222"
 }
