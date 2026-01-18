@@ -88,7 +88,7 @@ trait IntegrationTesterBase {
     val yamlHasContent = os.exists(buildMillYaml) && os.read(buildMillYaml).trim.nonEmpty
     val hasChildYamlModules = os.list(workspacePath)
       .filter(os.isDir)
-      .exists(dir => os.exists(dir / "package.mill.yaml"))
+      .exists(dir => os.exists(dir / "package.mill.yaml") || os.exists(dir / "package.mill"))
     if (yamlHasContent && os.exists(buildMill) && !hasChildYamlModules) {
       val parsed = ExampleParser(workspacePath)
       val hasCodeChunks =
