@@ -77,12 +77,19 @@ trait IntegrationTesterBase {
       )
       .foreach(os.copy.into(_, workspacePath))
 
-    // When build.mill.yaml exists and build.mill contains no Scala/Yaml chunks
-    // (i.e., it's purely documentation), convert build.mill to readme.adoc
-    // This mirrors what happens when example zips are created for distribution
+    // When build.mill.yaml exists with actual content and build.mill contains no
+    // Scala/Yaml chunks (i.e., it's purely documentation), convert build.mill to
+    // readme.adoc. This mirrors what happens when example zips are created for
+    // distribution. We skip this conversion if:
+    // - build.mill.yaml is empty (just a placeholder)
+    // - there are package.mill.yaml files in child directories (YAML-based module definitions)
     val buildMillYaml = workspacePath / "build.mill.yaml"
     val buildMill = workspacePath / "build.mill"
-    if (os.exists(buildMillYaml) && os.exists(buildMill)) {
+    val yamlHasContent = os.exists(buildMillYaml) && os.read(buildMillYaml).trim.nonEmpty
+    val hasChildYamlModules = os.list(workspacePath)
+      .filter(os.isDir)
+      .exists(dir => os.exists(dir / "package.mill.yaml"))
+    if (yamlHasContent && os.exists(buildMill) && !hasChildYamlModules) {
       val parsed = ExampleParser(workspacePath)
       val hasCodeChunks =
         parsed.exists(c => c.isInstanceOf[Chunk.Scala] || c.isInstanceOf[Chunk.Yaml])
