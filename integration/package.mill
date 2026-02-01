@@ -111,6 +111,10 @@ object `package` extends mill.Module {
     def testClasspath: T[Seq[PathRef]]
     def selectiveInputs: Seq[Task[?]] = Nil
 
+    // No selective execution inputs overrides by default, but individual submodules can
+    // override this to specify explicit selective execution inputs to use
+    def selectiveInputs: Seq[Task[?]] = null
+
     trait ModeModule extends MillBaseTestsModule {
       override def testClasspath: T[Seq[PathRef]] = IntegrationTestModule.this.testClasspath()
       def useSharedOut: Boolean
