@@ -42,6 +42,12 @@ object TestRunnerTestUtils {
       override def testForkGrouping = computeTestForkGrouping(discoveredTestClasses())
       override def testParallelism = enableParallelism
     }
+    object utestCustomFramework extends ScalaTests with TestModule.Utest {
+      override def utestVersion = sys.props.getOrElse("TEST_UTEST_VERSION", ???)
+      override def testFramework = "mill.scalalib.CustomFramework"
+      override def testParallelism = false
+      override def sources = Task.Sources(TestRunnerTestUtils.resourcePath / "utest" / "src")
+    }
 
     object scalatest extends ScalaTests with TestModule.ScalaTest {
       override def testForkGrouping = computeTestForkGrouping(discoveredTestClasses())

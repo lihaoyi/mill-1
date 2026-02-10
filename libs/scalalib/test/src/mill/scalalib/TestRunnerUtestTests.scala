@@ -6,6 +6,8 @@ import mill.testkit.UnitTester
 import sbt.testing.Status
 import utest.*
 
+import java.io.{ByteArrayOutputStream, PrintStream}
+
 object TestRunnerUtestTests extends TestSuite {
   import TestRunnerTestUtils.*
   override def tests: Tests = Tests {
@@ -115,6 +117,19 @@ object TestRunnerUtestTests extends TestSuite {
             msg == "Test selector does not match any test: noMatch noMatch*2\nRun discoveredTestClasses to see available tests"
           )
         }
+      }
+    }
+    test("custom framework setup called once") {
+      val outStream = new ByteArrayOutputStream()
+      UnitTester(
+        testrunner,
+        outStream = new PrintStream(outStream, true),
+        sourceRoot = resourcePath
+      ).scoped { eval =>
+        val Right(_) = eval.apply(testrunner.utestCustomFramework.testForked()).runtimeChecked
+        val stdout = new String(outStream.toByteArray)
+        assert(stdout.split("CUSTOM_FRAMEWORK_SETUP", -1).length - 1 == 1)
+        assert(stdout.split("CUSTOM_FRAMEWORK_TEARDOWN", -1).length - 1 == 1)
       }
     }
 
