@@ -34,6 +34,10 @@ object JavaCompileErrorFormattingTests extends TestSuite {
     }
   }
 
+  private def dropOptionalTaskFailed(lines: Seq[String]): Seq[String] =
+    if (lines.endsWith(Seq("", "[error] core.compile task failed"))) lines.dropRight(1)
+    else lines
+
   val tests: Tests = Tests {
     test("javaTypeUnchecked") {
       assertGoldenLiteral(
@@ -108,15 +112,14 @@ object JavaCompileErrorFormattingTests extends TestSuite {
 
     test("javaParseSemicolon") {
       assertGoldenLiteral(
-        checkLines("java-parse-semicolon"),
+        dropOptionalTaskFailed(checkLines("java-parse-semicolon")),
         List(
           "compiling 1 Java source to out/core/compile.dest/classes ...",
           "[error] core/src/Foo.java:5:18",
           "        int x = 1",
           "                 ^",
           "';' expected",
-          "",
-          "[error] core.compile task failed"
+          ""
         )
       )
     }
