@@ -107,6 +107,26 @@ object PathRefTests extends TestSuite {
       test("qref") - check(quick = true)
       test("ref") - check(quick = false)
     }
+
+    test("shellArgumentIsAbsoluteButSerializationRemainsRelative") - withTmpDir { tmpDir =>
+      val file = tmpDir / "script"
+      os.write(file, "script")
+      val pathRef = PathRef(file)
+      val serializer = os.Path.pathRemapSerializerNio(
+        Seq(tmpDir.wrapped -> java.nio.file.Paths.get("..", "mill-workspace"))
+      )
+
+      os.Path.pathSerializer.withValue(serializer) {
+        val serializedPath = file.toString
+        val serializedPathRef = upickle.write(pathRef)
+        assert(
+          serializedPath.startsWith(".."),
+          upickle.read[String](serializedPathRef).endsWith(s":$serializedPath"),
+          upickle.read[PathRef](serializedPathRef) == pathRef,
+          os.proc(pathRef).commandChunks == Seq(PathRef.toAbsString(pathRef))
+        )
+      }
+    }
   }
 
   private def withTmpDir[T](body: os.Path => T): T = {
