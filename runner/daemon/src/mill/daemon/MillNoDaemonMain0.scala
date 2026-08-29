@@ -1,11 +1,11 @@
 package mill.daemon
 
-import mill.constants.{DaemonFiles, Util}
+import mill.constants.DaemonFiles
 import mill.constants.OutFiles.OutFiles
 import mill.daemon.MillMain0.handleMillException
 import mill.api.BuildCtx
 import mill.internal.{LauncherLockRegistry, LauncherOutFilesState, OutputDirectoryLayout}
-import mill.launcher.DaemonRpc
+import mill.launcher.{DaemonRpc, MillProcessLauncher}
 import mill.server.Server
 
 import scala.jdk.CollectionConverters.*
@@ -14,9 +14,11 @@ import scala.util.Properties
 object MillNoDaemonMain0 {
   def main(args0: Array[String]): Unit = mill.api.SystemStreamsUtils.withTopLevelSystemStreamProxy {
     val initialSystemStreams = mill.api.SystemStreams.original
+    val stdoutInteractive = MillProcessLauncher.stdoutIsTerminal()
+    val stderrInteractive = MillProcessLauncher.stderrIsTerminal()
 
-    if (Properties.isWin && Util.hasConsole())
-      io.github.alexarchambault.windowsansi.WindowsAnsi.setup()
+    if (Properties.isWin)
+      MillProcessLauncher.setupWindowsAnsiForTerminals(stdoutInteractive, stderrInteractive)
 
     if (Properties.isWin)
       // temporarily disabling FFM use by coursier, which has issues with the way
@@ -62,7 +64,8 @@ object MillNoDaemonMain0 {
           sharedState = new java.util.concurrent.atomic.AtomicReference(RunnerSharedState.empty),
           lockRegistry = new LauncherLockRegistry,
           outFilesState = new LauncherOutFilesState,
-          mainInteractive = mill.constants.Util.hasConsole(),
+          stderrInteractive = stderrInteractive,
+          stdoutInteractive = stdoutInteractive,
           streams0 = initialSystemStreams,
           env = env,
           launcherPid = processId,

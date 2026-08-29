@@ -18,6 +18,8 @@ import java.io.*
  */
 class PromptLogger(
     colored: Boolean,
+    stdoutInteractive: Boolean,
+    stdoutPrefixColor: fansi.Attrs,
     enableTicker: Boolean,
     infoColor: fansi.Attrs,
     warnColor: fansi.Attrs,
@@ -59,6 +61,7 @@ class PromptLogger(
         systemStreams0,
         () => promptLineState.getCurrentPrompt(),
         interactive = () => isInteractive(),
+        stdoutInteractive = stdoutInteractive,
         paused = () => runningState.paused,
         synchronizer = this
       )
@@ -172,6 +175,9 @@ class PromptLogger(
         logToOut: Boolean
     ): Unit = {
       val logStream = if (logToOut) streams.out else streams.err
+      val prefixColor: fansi.Attrs =
+        if (logToOut) stdoutPrefixColor else PromptLogger.this.infoColor
+      def renderPrefixColor(s: String): String = prefixColor(s).render
       if (enableTicker) {
         // Split the log message into lines outside the synchronized block since
         // splitPreserveEOL is a pure function with no shared-state dependencies
@@ -223,7 +229,7 @@ class PromptLogger(
 
             def printPrefixed(prefix: String, line: Array[Byte]) = {
               if (!incompleteLine) {
-                logStream.print(infoColor(prefix))
+                logStream.print(renderPrefixColor(prefix))
                 if (line.nonEmpty && prefix.nonEmpty) logStream.print(" ")
               }
               // Make sur we flush after each write, because we are possibly writing to stdout
@@ -253,21 +259,21 @@ class PromptLogger(
                       termDimensions._1.getOrElse(defaultTermWidth)
 
                   if (combineMessageAndLog)
-                    printPrefixed(infoColor(longPrefix), stripAnsi(firstLine))
+                    printPrefixed(longPrefix, stripAnsi(firstLine))
                   else {
-                    logStream.print(infoColor(longPrefix))
+                    logStream.print(renderPrefixColor(longPrefix))
                     logStream.print('\n')
-                    printPrefixed(infoColor(prefix), stripAnsi(firstLine))
+                    printPrefixed(prefix, stripAnsi(firstLine))
                   }
 
-                  restLines.foreach(l => printPrefixed(infoColor(prefix), stripAnsi(l)))
+                  restLines.foreach(l => printPrefixed(prefix, stripAnsi(l)))
 
                 case Seq() =>
-                  logStream.print(infoColor(longPrefix))
+                  logStream.print(renderPrefixColor(longPrefix))
                   logStream.print("\n")
                   logStream.flush()
               }
-            } else lines.foreach(l => printPrefixed(infoColor(prefix), stripAnsi(l)))
+            } else lines.foreach(l => printPrefixed(prefix, stripAnsi(l)))
           }
         }
       } else logStream.synchronized { logMsg.writeTo(logStream) }
@@ -393,6 +399,7 @@ object PromptLogger {
       systemStreams0: SystemStreams,
       getCurrentPrompt: () => Array[Byte],
       interactive: () => Boolean,
+      stdoutInteractive: Boolean,
       paused: () => Boolean,
       synchronizer: AnyRef
   ) {
@@ -475,7 +482,9 @@ object PromptLogger {
       }
 
       override def write(dest: OutputStream, buf: Array[Byte], end: Int): Unit = {
-        if (enableTicker && interactive()) {
+        val destinationInteractive =
+          if (dest eq systemStreams0.out) stdoutInteractive else interactive()
+        if (enableTicker && interactive() && destinationInteractive) {
           lastCharWritten = buf(end - 1).toChar
           synchronizer.synchronized {
             moveUp()

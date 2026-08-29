@@ -1,6 +1,5 @@
 package mill.launcher
 
-import io.github.alexarchambault.nativeterm.NativeTerminal
 import mill.api.PathRef
 import mill.api.internal.{OneOrMore, PathAliasing}
 import mill.client.ClientUtil
@@ -12,6 +11,63 @@ import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 object MillProcessLauncher {
+  private[launcher] def isTerminal(fileDescriptor: Int, isatty: Int => Int): Boolean =
+    isatty(fileDescriptor) == 1
+
+  private def isTerminal(fileDescriptor: Int): Boolean = {
+    try {
+      JLineNativeLoader.initJLineNative()
+      val isatty =
+        if (Util.isWindows) org.jline.nativ.Kernel32.isatty
+        else org.jline.nativ.CLibrary.isatty
+      isTerminal(fileDescriptor, isatty)
+    } catch {
+      case _: Throwable => Util.hasConsole()
+    }
+  }
+
+  private[mill] def stdoutIsTerminal(): Boolean = isTerminal(1)
+  private[mill] def stderrIsTerminal(): Boolean = isTerminal(2)
+
+  private[launcher] def terminalFileDescriptors(
+      stdoutInteractive: Boolean,
+      stderrInteractive: Boolean
+  ): Seq[Int] = Seq(1 -> stdoutInteractive, 2 -> stderrInteractive).collect {
+    case (fileDescriptor, true) => fileDescriptor
+  }
+
+  private[mill] def setupWindowsAnsiForTerminals(
+      stdoutInteractive: Boolean,
+      stderrInteractive: Boolean
+  ): Unit =
+    terminalFileDescriptors(stdoutInteractive, stderrInteractive).foreach { fileDescriptor =>
+      JLineNativeLoader.initJLineNative()
+      val stdHandle = fileDescriptor match {
+        case 1 => org.jline.nativ.Kernel32.STD_OUTPUT_HANDLE
+        case 2 => org.jline.nativ.Kernel32.STD_ERROR_HANDLE
+      }
+      val handle = org.jline.nativ.Kernel32.GetStdHandle(stdHandle)
+      val mode = Array(0)
+      if (org.jline.nativ.Kernel32.GetConsoleMode(handle, mode) == 0) {
+        throw new java.io.IOException(
+          s"Failed to get fd $fileDescriptor console mode: " +
+            org.jline.nativ.Kernel32.getLastErrorMessage()
+        )
+      }
+      val enableVirtualTerminalProcessing = 0x0004
+      if (
+        org.jline.nativ.Kernel32.SetConsoleMode(
+          handle,
+          mode(0) | enableVirtualTerminalProcessing
+        ) == 0
+      ) {
+        throw new java.io.IOException(
+          s"Failed to enable fd $fileDescriptor ANSI support: " +
+            org.jline.nativ.Kernel32.getLastErrorMessage()
+        )
+      }
+    }
+
   private def outDir(outMode: OutFolderMode, workDir: os.Path, env: Map[String, String]): String =
     OutputDirectoryLayout.outDir(outMode, workDir, env)
 
@@ -350,20 +406,32 @@ object MillProcessLauncher {
   // Returns native terminal size if available, avoiding calling getSize twice
   private def getNativeTerminalSize(): Option[(Int, Int)] = {
     JLineNativeLoader.initJLineNative()
-    if (Util.hasConsole()) {
-      try {
-        val size = NativeTerminal.getSize
-        Some((size.getWidth, size.getHeight))
-      } catch {
-        case _: Throwable => None
-      }
-    } else None
+    try {
+      val size =
+        if (Util.isWindows) {
+          val handle = org.jline.nativ.Kernel32.GetStdHandle(
+            org.jline.nativ.Kernel32.STD_ERROR_HANDLE
+          )
+          val info = new org.jline.nativ.Kernel32.CONSOLE_SCREEN_BUFFER_INFO()
+          Option.when(org.jline.nativ.Kernel32.GetConsoleScreenBufferInfo(handle, info) != 0) {
+            (info.windowWidth(), info.windowHeight())
+          }
+        } else {
+          val size = new org.jline.nativ.CLibrary.WinSize()
+          Option.when(
+            org.jline.nativ.CLibrary.ioctl(2, org.jline.nativ.CLibrary.TIOCGWINSZ, size) == 0
+          )((size.ws_col.toInt, size.ws_row.toInt))
+        }
+      size.filter { case (width, height) => width > 0 && height > 0 }
+    } catch {
+      case _: Throwable => None
+    }
   }
 
   /** Get current terminal dimensions. Returns TerminalDimsResult with width/height. */
   def getTerminalDims(): DaemonRpc.TerminalDimsResult = {
     try {
-      if (!Util.hasConsole()) DaemonRpc.TerminalDimsResult(None, None)
+      if (!stderrIsTerminal()) DaemonRpc.TerminalDimsResult(None, None)
       else getNativeTerminalSize() match {
         case Some((width, height)) => DaemonRpc.TerminalDimsResult(Some(width), Some(height))
         case None if !tputExists => DaemonRpc.TerminalDimsResult(Some(78), Some(24))

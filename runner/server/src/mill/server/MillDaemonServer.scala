@@ -130,7 +130,8 @@ abstract class MillDaemonServer(
         val result =
           try main0(
               args = init.args.toArray,
-              mainInteractive = init.interactive,
+              stderrInteractive = init.interactive,
+              stdoutInteractive = init.stdoutInteractive,
               streams = new SystemStreams(stdout, stderr, rpcStdin),
               env = init.env,
               launcherPid = init.clientPid,
@@ -226,7 +227,8 @@ abstract class MillDaemonServer(
 
   def main0(
       args: Array[String],
-      mainInteractive: Boolean,
+      stderrInteractive: Boolean,
+      stdoutInteractive: Boolean,
       streams: SystemStreams,
       env: Map[String, String],
       launcherPid: Long,

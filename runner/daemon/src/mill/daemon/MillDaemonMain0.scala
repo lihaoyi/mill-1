@@ -114,7 +114,8 @@ class MillDaemonMain0(
 
   def main0(
       args: Array[String],
-      mainInteractive: Boolean,
+      stderrInteractive: Boolean,
+      stdoutInteractive: Boolean,
       streams: SystemStreams,
       env: Map[String, String],
       launcherPid: Long,
@@ -136,7 +137,8 @@ class MillDaemonMain0(
         sharedState = sharedState,
         lockRegistry = lockRegistry,
         outFilesState = outFilesState,
-        mainInteractive = mainInteractive,
+        stderrInteractive = stderrInteractive,
+        stdoutInteractive = stdoutInteractive,
         streams0 = streams,
         env = env,
         launcherPid = launcherPid,

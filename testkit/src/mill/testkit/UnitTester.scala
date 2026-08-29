@@ -90,6 +90,8 @@ class UnitTester(
 
   object logger extends mill.internal.PromptLogger(
         colored = true,
+        stdoutInteractive = true,
+        stdoutPrefixColor = mill.internal.Colors.Default.info,
         enableTicker = false,
         infoColor = mill.internal.Colors.Default.info,
         warnColor = mill.internal.Colors.Default.warn,

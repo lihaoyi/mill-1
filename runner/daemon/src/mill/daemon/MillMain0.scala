@@ -108,7 +108,8 @@ object MillMain0 {
       sharedState: java.util.concurrent.atomic.AtomicReference[RunnerSharedState],
       lockRegistry: LauncherLockRegistry,
       outFilesState: LauncherOutFilesState,
-      mainInteractive: Boolean,
+      stderrInteractive: Boolean,
+      stdoutInteractive: Boolean,
       streams0: SystemStreams,
       env: Map[String, String],
       launcherPid: Long,
@@ -176,10 +177,12 @@ object MillMain0 {
               case Result.Success(config) =>
                 val noColorViaEnv = env.get("NO_COLOR").exists(_.nonEmpty)
                 val forceColorViaEnv = env.get("FORCE_COLOR").exists(_.nonEmpty)
-                val colored = config.color.getOrElse(
-                  (mainInteractive || forceColorViaEnv) &&
+                def coloredFor(interactive: Boolean) = config.color.getOrElse(
+                  (interactive || forceColorViaEnv) &&
                     !(noColorViaEnv || config.bsp.value)
                 )
+                val colored = coloredFor(stderrInteractive)
+                val stdoutColored = coloredFor(stdoutInteractive)
                 val colors =
                   if (colored) mill.internal.Colors.Default else mill.internal.Colors.BlackWhite
 
@@ -375,6 +378,8 @@ object MillMain0 {
                                     config = config,
                                     enableTicker = enableTicker,
                                     colored = colored,
+                                    stdoutInteractive = stdoutInteractive,
+                                    stdoutColored = stdoutColored,
                                     colors = colors,
                                     runArtifacts = runArtifacts,
                                     serverToClientOpt = serverToClientOpt
@@ -724,6 +729,8 @@ object MillMain0 {
       config: MillCliConfig,
       enableTicker: Boolean,
       colored: Boolean,
+      stdoutInteractive: Boolean,
+      stdoutColored: Boolean,
       colors: Colors,
       runArtifacts: LauncherOutFiles,
       serverToClientOpt: Option[mill.rpc.MillRpcChannel[mill.launcher.DaemonRpc.ServerToClient]]
@@ -767,6 +774,9 @@ object MillMain0 {
 
     val promptLogger = new PromptLogger(
       colored = colored,
+      stdoutInteractive = stdoutInteractive,
+      stdoutPrefixColor =
+        if (stdoutColored) mill.internal.Colors.Default.info else fansi.Attrs.Empty,
       enableTicker = enableTicker,
       infoColor = colors.info,
       warnColor = colors.warn,

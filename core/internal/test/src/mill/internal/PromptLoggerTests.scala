@@ -13,6 +13,8 @@ object PromptLoggerTests extends TestSuite {
     val baosErr = PrintStream(ProxyStream.Output(baos, ProxyStream.ERR))
     val promptLogger = new PromptLogger(
       colored = false,
+      stdoutInteractive = true,
+      stdoutPrefixColor = fansi.Attrs.Empty,
       enableTicker = true,
       infoColor = fansi.Attrs.Empty,
       warnColor = fansi.Attrs.Empty,
@@ -56,6 +58,59 @@ object PromptLoggerTests extends TestSuite {
   }
 
   val tests = Tests {
+    test("prefixColorFollowsOutputStream") {
+      def check(
+          stderrColored: Boolean,
+          stdoutColored: Boolean
+      ): Unit = {
+        val stdout = ByteArrayOutputStream()
+        val stderr = ByteArrayOutputStream()
+        val promptLogger = new PromptLogger(
+          colored = stderrColored,
+          stdoutInteractive = stdoutColored,
+          stdoutPrefixColor = if (stdoutColored) fansi.Color.Blue else fansi.Attrs.Empty,
+          enableTicker = true,
+          infoColor = if (stderrColored) fansi.Color.Blue else fansi.Attrs.Empty,
+          warnColor = fansi.Attrs.Empty,
+          errorColor = fansi.Attrs.Empty,
+          successColor = fansi.Attrs.Empty,
+          highlightColor = fansi.Attrs.Empty,
+          systemStreams0 = SystemStreams(PrintStream(stdout), PrintStream(stderr), System.in),
+          debugEnabled = false,
+          titleText = "TITLE",
+          terminalDimsCallback = () => None,
+          currentTimeMillis = () => 0L,
+          autoUpdate = false,
+          chromeProfileLogger = new JsonArrayLogger.ChromeProfile(os.temp())
+        )
+
+        var closed = false
+        try {
+          promptLogger.streamsAwaitPumperEmpty()
+          stdout.reset()
+          stderr.reset()
+          promptLogger.prompt.setPromptLine(Seq("1"), "", "task")
+
+          val prefixLogger = PrefixLogger(promptLogger, Seq("1"))
+          prefixLogger.streams.out.println("STDOUT_MARKER")
+          prefixLogger.streams.err.println("STDERR_MARKER")
+          promptLogger.close()
+          closed = true
+
+          val stdoutText = stdout.toString
+          val stderrText = stderr.toString
+          assert(stdoutText.contains("STDOUT_MARKER"))
+          assert(stderrText.contains("STDERR_MARKER"))
+          assert(stdoutText.sliding(5).count(_ == "\u001b[34m") == (if (stdoutColored) 1 else 0))
+          assert(stderrText.sliding(5).count(_ == "\u001b[34m") == (if (stderrColored) 1 else 0))
+          assert(promptLogger.prompt.colored == stderrColored)
+        } finally if (!closed) promptLogger.close()
+      }
+
+      check(stderrColored = true, stdoutColored = false)
+      check(stderrColored = false, stdoutColored = true)
+    }
+
     test("nonInteractive") - retry(3) {
       var now = 0L
 

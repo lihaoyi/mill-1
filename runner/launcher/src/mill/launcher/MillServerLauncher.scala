@@ -5,8 +5,8 @@ import mill.api.daemon.SystemStreams
 import mill.client.{ClientUtil, LaunchedServer, ServerLauncher}
 import mill.constants.BuildInfo
 import mill.constants.EnvVars
-import mill.client.lock.Locks
 import mill.constants.Util
+import mill.client.lock.Locks
 import mill.rpc.RpcConsole
 
 import java.io.{BufferedReader, InputStreamReader, PrintStream}
@@ -80,8 +80,14 @@ class MillServerLauncher(
       val socketIn = BufferedReader(InputStreamReader(socket.getInputStream))
       val socketOut = PrintStream(socket.getOutputStream, true)
 
+      val stderrInteractive = MillProcessLauncher.stderrIsTerminal()
+      val stdoutInteractive = MillProcessLauncher.stdoutIsTerminal()
+      if (Util.isWindows)
+        MillProcessLauncher.setupWindowsAnsiForTerminals(stdoutInteractive, stderrInteractive)
+
       val init = DaemonRpc.Initialize(
-        interactive = Util.hasConsole(),
+        interactive = stderrInteractive,
+        stdoutInteractive = stdoutInteractive,
         clientPid = ProcessHandle.current().pid(),
         clientMillVersion = BuildInfo.millVersion,
         clientJavaVersion = javaHome.map(_.toString).getOrElse(""),

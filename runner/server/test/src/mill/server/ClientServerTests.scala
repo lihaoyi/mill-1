@@ -57,7 +57,8 @@ trait ClientServerTestsBase extends TestSuite {
     }
     def main0(
         args: Array[String],
-        mainInteractive: Boolean,
+        stderrInteractive: Boolean,
+        stdoutInteractive: Boolean,
         streams: SystemStreams,
         env: Map[String, String],
         launcherPid: Long,

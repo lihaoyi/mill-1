@@ -1,0 +1,8 @@
+package build
+
+import mill.*
+
+def emitMarkers() = Task.Command {
+  println("STDOUT_MARKER")
+  Task.log.warn("STDERR_COLOR_MARKER")
+}

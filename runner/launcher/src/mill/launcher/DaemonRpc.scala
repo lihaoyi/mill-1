@@ -13,7 +13,9 @@ object DaemonRpc {
   // ReadWriter for LauncherSubprocess.Config (defined in core/api/daemon which has no upickle dependency)
   given ReadWriter[LauncherSubprocess.Config] = upickle.default.macroRW
   case class Initialize(
+      // Interactivity here means stderr/fd2.
       interactive: Boolean,
+      stdoutInteractive: Boolean,
       clientPid: Long,
       clientMillVersion: String,
       clientJavaVersion: String,
