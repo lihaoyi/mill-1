@@ -10,11 +10,45 @@ import mill.internal.MillCliConfig
 import java.io.{PrintWriter, StringWriter}
 import java.time.format.DateTimeFormatter
 import java.time.{Instant, ZoneId}
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 /**
  * Mill launcher main entry point.
  */
 object MillLauncherMain {
+  private val systemPropertiesLock = new ReentrantReadWriteLock()
+
+  private case class PreparedLaunch(
+      optsArgs: Seq[String],
+      millRepositories: Seq[String],
+      millJvmCommand: Seq[String],
+      configuredJavaHome: Option[os.Path],
+      javaHome: Option[os.Path],
+      jvmOpts: Seq[String],
+      userSpecifiedProperties: Map[String, String]
+  )
+
+  private[launcher] def withSystemProperties[T](properties: Map[String, String])(f: => T): T = {
+    // main0 is also used in-process by tests. This restores the property map, but initialization
+    // performed by f can modify other process-global state that cannot be rolled back.
+    val lock =
+      if (properties.isEmpty) systemPropertiesLock.readLock()
+      else systemPropertiesLock.writeLock()
+    lock.lock()
+    try {
+      val previous =
+        properties.keysIterator.map(key => key -> Option(System.getProperty(key))).toMap
+      properties.foreach { case (key, value) => System.setProperty(key, value) }
+      try f
+      finally {
+        previous.foreach {
+          case (key, Some(value)) => System.setProperty(key, value)
+          case (key, None) => System.clearProperty(key)
+        }
+      }
+    } finally lock.unlock()
+  }
+
   def main(args: Array[String]): Unit = {
     System.exit(main0(args, None, sys.env, os.pwd))
   }
@@ -38,8 +72,11 @@ object MillLauncherMain {
     // daemon, in contrast, *does* relativize and relies on the symlinks the launcher installs at its
     // fixed cwd-parent.
     PathAliasing.withRawPathSerializer {
-      val stderr = streamsOpt.map(_.err).getOrElse(System.err)
       val parsedConfig = MillCliConfig.parse(args).toOption
+      val earlySystemProperties = parsedConfig.fold(Map.empty[String, String])(
+        _.extraSystemProperties
+      )
+      val stderr = streamsOpt.map(_.err).getOrElse(System.err)
 
       val bspServerMode = parsedConfig.exists(_.bsp.value)
       val bspMode = bspServerMode || parsedConfig.exists(_.bspInstall.value)
@@ -67,8 +104,6 @@ object MillLauncherMain {
 
       if (bspServerMode) logBspInfoMessage(outDir, regularOutDir)
 
-      coursier.Resolve.proxySetup()
-
       // Reproducible builds: tell the daemon where the workspace lives, and configure the os-lib
       // path relativizer so cached output paths serialize via the `out/mill-workspace` /
       // `out/mill-home` aliases. These env vars contribute to the daemon's restart fingerprint,
@@ -78,46 +113,70 @@ object MillLauncherMain {
       val scopedEnv = effectiveEnv ++ workspaceEnv
 
       try {
-        val millRepositories =
-          MillProcessLauncher.loadMillConfig(ConfigConstants.millRepositories, workDir)
-        val runnerClasspath = CoursierClient.resolveMillDaemon(regularOutDir, millRepositories)
-        // Surface build-header `mill-remote-cache-*` keys as CLI flags, before the user's args
-        // so an explicit CLI flag still wins.
-        val remoteCacheArgs = Seq(
-          ConfigConstants.millRemoteCacheLocation -> "--remote-cache-location",
-          ConfigConstants.millRemoteCacheSalt -> "--remote-cache-salt",
-          ConfigConstants.millRemoteCacheFilter -> "--remote-cache-filter"
-        ).flatMap { case (key, flag) =>
-          MillProcessLauncher.loadMillConfig(key, workDir).flatMap(value => Seq(flag, value))
+        val prepared = withSystemProperties(earlySystemProperties) {
+          coursier.Resolve.proxySetup()
+
+          val millRepositories =
+            MillProcessLauncher.loadMillConfig(ConfigConstants.millRepositories, workDir)
+          val runnerClasspath = CoursierClient.resolveMillDaemon(regularOutDir, millRepositories)
+          // Surface build-header `mill-remote-cache-*` keys as CLI flags, before the user's args
+          // so an explicit CLI flag still wins.
+          val remoteCacheArgs = Seq(
+            ConfigConstants.millRemoteCacheLocation -> "--remote-cache-location",
+            ConfigConstants.millRemoteCacheSalt -> "--remote-cache-salt",
+            ConfigConstants.millRemoteCacheFilter -> "--remote-cache-filter"
+          ).flatMap { case (key, flag) =>
+            MillProcessLauncher.loadMillConfig(key, workDir).flatMap(value => Seq(flag, value))
+          }
+          val optsArgs =
+            MillProcessLauncher.loadMillConfig(ConfigConstants.millOpts, workDir) ++
+              remoteCacheArgs ++ args
+          val javaHome = MillProcessLauncher.javaHome(scopedEnv, workDir, millRepositories)
+
+          PreparedLaunch(
+            optsArgs = optsArgs,
+            millRepositories = millRepositories,
+            millJvmCommand = MillProcessLauncher.millLaunchJvmCommand(
+              runnerClasspath,
+              scopedEnv,
+              workDir,
+              millRepositories
+            ),
+            configuredJavaHome = MillProcessLauncher.configuredJavaHome(
+              scopedEnv,
+              workDir,
+              millRepositories
+            ),
+            javaHome = javaHome,
+            jvmOpts = MillProcessLauncher.computeJvmOpts(workDir, scopedEnv),
+            userSpecifiedProperties =
+              ClientUtil.getUserSetProperties() ++ earlySystemProperties
+          )
         }
-        val optsArgs =
-          MillProcessLauncher.loadMillConfig(ConfigConstants.millOpts, workDir) ++
-            remoteCacheArgs ++ args
 
         if (runNoDaemon)
           MillProcessLauncher.launchMillNoDaemon(
-            optsArgs,
+            prepared.optsArgs,
             outMode,
-            runnerClasspath,
+            prepared.millJvmCommand,
             mainClass =
               if (bspSeparateOutputDir) "mill.daemon.MillBspMain"
               else "mill.daemon.MillNoDaemonMain",
             useFileLocks,
             workDir,
             scopedEnv,
-            millRepositories,
+            prepared.configuredJavaHome,
+            prepared.userSpecifiedProperties,
             streamsOpt = streamsOpt
           )
         else
           runViaDaemon(
-            optsArgs,
+            prepared,
             outMode,
             outDir,
-            runnerClasspath,
             useFileLocks,
             workDir,
             scopedEnv,
-            millRepositories,
             streamsOpt,
             stderr,
             log
@@ -138,23 +197,20 @@ object MillLauncherMain {
   }
 
   private def runViaDaemon(
-      optsArgs: Seq[String],
+      prepared: PreparedLaunch,
       outMode: OutFolderMode,
       outDir: String,
-      runnerClasspath: Seq[os.Path],
       useFileLocks: Boolean,
       workDir: os.Path,
       effectiveEnv: Map[String, String],
-      millRepositories: Seq[String],
       streamsOpt: Option[SystemStreams],
       stderr: java.io.PrintStream,
       log: String => Unit
   ): Int = {
-    val jvmOpts = MillProcessLauncher.computeJvmOpts(workDir, effectiveEnv)
     val launcher = new MillServerLauncher(
       streamsOpt = streamsOpt,
       env = effectiveEnv,
-      args = optsArgs,
+      args = prepared.optsArgs,
       forceFailureForTestingMillisDelay = -1,
       useFileLocks = useFileLocks,
       initServerFactory = (daemonDir, _) =>
@@ -162,19 +218,18 @@ object MillLauncherMain {
           MillProcessLauncher.launchMillDaemon(
             daemonDir,
             outMode,
-            runnerClasspath,
+            prepared.millJvmCommand,
             useFileLocks,
             workDir,
             effectiveEnv,
-            millRepositories
+            prepared.configuredJavaHome
           ).wrapped.toHandle
         ),
-      jvmOpts = jvmOpts,
-      millRepositories = millRepositories
+      jvmOpts = prepared.jvmOpts,
+      millRepositories = prepared.millRepositories
     )
 
     val daemonDir = os.Path(outDir, workDir) / OutFiles.OutFiles.millDaemon
-    val javaHome = MillProcessLauncher.javaHome(effectiveEnv, workDir, millRepositories)
 
     MillProcessLauncher.prepareMillRunFolder(daemonDir)
 
@@ -183,9 +238,19 @@ object MillLauncherMain {
     // - The server was terminated while this client was waiting
     val maxRetries = 10
     var retries = 0
-    var exitCode = launcher.run(daemonDir, javaHome, log)
+    var exitCode = launcher.run(
+      daemonDir,
+      prepared.javaHome,
+      log,
+      prepared.userSpecifiedProperties
+    )
     while (exitCode == ClientUtil.ServerExitPleaseRetry && retries < maxRetries) {
-      exitCode = launcher.run(daemonDir, javaHome, log)
+      exitCode = launcher.run(
+        daemonDir,
+        prepared.javaHome,
+        log,
+        prepared.userSpecifiedProperties
+      )
       retries += 1
     }
     if (exitCode == ClientUtil.ServerExitPleaseRetry)

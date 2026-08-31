@@ -26,7 +26,15 @@ class MillServerLauncher(
 ) {
   private val serverInitWaitMillis = 10000
 
-  def run(daemonDir: os.Path, javaHome: Option[os.Path], log: String => Unit): Int = {
+  def run(daemonDir: os.Path, javaHome: Option[os.Path], log: String => Unit): Int =
+    run(daemonDir, javaHome, log, ClientUtil.getUserSetProperties())
+
+  def run(
+      daemonDir: os.Path,
+      javaHome: Option[os.Path],
+      log: String => Unit,
+      userSpecifiedProperties: Map[String, String]
+  ): Int = {
     os.makeDir.all(daemonDir)
     // The launcher and daemon both open this lock; avoid cwd-dependent alias strings.
     val locks = Locks.forDirectory(PathRef.toAbsString(daemonDir), useFileLocks)
@@ -53,7 +61,13 @@ class MillServerLauncher(
 
     try {
       log(s"runWithConnection (RPC): $launched")
-      val result = runRpc(launched.socket.get, javaHome, daemonDir, log)
+      val result = runRpc(
+        launched.socket.get,
+        javaHome,
+        daemonDir,
+        log,
+        userSpecifiedProperties
+      )
       log(s"runWithConnection exit code: $result")
       result
     } finally {
@@ -71,7 +85,8 @@ class MillServerLauncher(
       socket: Socket,
       javaHome: Option[os.Path],
       daemonDir: os.Path,
-      log: String => Unit
+      log: String => Unit,
+      userSpecifiedProperties: Map[String, String]
   ): Int = {
     val stdout = streamsOpt.map(_.out).getOrElse(System.out)
     val stderr = streamsOpt.map(_.err).getOrElse(System.err)
@@ -88,7 +103,7 @@ class MillServerLauncher(
         clientJvmOpts = jvmOpts,
         args = args,
         env = env,
-        userSpecifiedProperties = ClientUtil.getUserSetProperties(),
+        userSpecifiedProperties = userSpecifiedProperties,
         millRepositories = millRepositories
       )
 

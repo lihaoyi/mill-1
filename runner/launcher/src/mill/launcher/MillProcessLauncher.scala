@@ -18,12 +18,13 @@ object MillProcessLauncher {
   def launchMillNoDaemon(
       args: Seq[String],
       outMode: OutFolderMode,
-      runnerClasspath: Seq[os.Path],
+      millJvmCommand: Seq[String],
       mainClass: String,
       useFileLocks: Boolean,
       workDir: os.Path,
       effectiveEnv: Map[String, String],
-      millRepositories: Seq[String],
+      daemonJavaHome: Option[os.Path],
+      userSpecifiedProperties: Map[String, String],
       streamsOpt: Option[mill.api.daemon.SystemStreams] = None
   ): Int = {
     val sig = f"${UUID.randomUUID().hashCode}%08x"
@@ -32,9 +33,10 @@ object MillProcessLauncher {
 
     prepareMillRunFolder(processDir)
 
-    val userPropsSeq = ClientUtil.getUserSetProperties().map { case (k, v) => s"-D$k=$v" }.toSeq
+    val userPropsSeq =
+      userSpecifiedProperties.toSeq.sortBy(_._1).map { case (k, v) => s"-D$k=$v" }
 
-    val cmd = millLaunchJvmCommand(runnerClasspath, effectiveEnv, workDir, millRepositories) ++
+    val cmd = millJvmCommand ++
       userPropsSeq ++
       Seq(
         mainClass,
@@ -74,7 +76,7 @@ object MillProcessLauncher {
       stderr = stderrDest,
       workDir = workDir,
       env = effectiveEnv,
-      daemonJavaHome = configuredJavaHome(effectiveEnv, workDir, millRepositories)
+      daemonJavaHome = daemonJavaHome
     )
     try {
       proc.waitFor()
@@ -91,13 +93,13 @@ object MillProcessLauncher {
   def launchMillDaemon(
       daemonDir: os.Path,
       outMode: OutFolderMode,
-      runnerClasspath: Seq[os.Path],
+      millJvmCommand: Seq[String],
       useFileLocks: Boolean,
       workDir: os.Path,
       effectiveEnv: Map[String, String],
-      millRepositories: Seq[String]
+      daemonJavaHome: Option[os.Path]
   ): os.SubProcess = {
-    val cmd = millLaunchJvmCommand(runnerClasspath, effectiveEnv, workDir, millRepositories) ++
+    val cmd = millJvmCommand ++
       Seq(
         "mill.daemon.MillDaemonMain",
         // Daemon entry point reads `args[0]` with plain Java path APIs.
@@ -113,7 +115,7 @@ object MillProcessLauncher {
       stderr = daemonDir / DaemonFiles.stderr,
       workDir = workDir,
       env = effectiveEnv,
-      daemonJavaHome = configuredJavaHome(effectiveEnv, workDir, millRepositories)
+      daemonJavaHome = daemonJavaHome
     )
   }
 
