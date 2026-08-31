@@ -34,7 +34,8 @@ object ZincOp {
       compilerBridgeOpt: Option[PathRef],
       incrementalCompilation: Boolean,
       auxiliaryClassFileExtensions: Seq[String],
-      workDir: os.Path
+      workDir: os.Path,
+      @com.lihaoyi.unroll semanticDbSourceRoot: Option[os.Path] = None
   ) extends ZincOp {
     type Response = Result[CompilationResult]
   }

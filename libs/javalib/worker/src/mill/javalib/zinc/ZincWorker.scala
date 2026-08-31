@@ -191,6 +191,7 @@ class ZincWorker(jobs: Int, useFileLocks: Boolean = false) extends AutoCloseable
         reportCachedProblems = reportCachedProblems,
         incrementalCompilation = op.incrementalCompilation,
         auxiliaryClassFileExtensions = Seq.empty,
+        semanticDbSourceRoot = None,
         localConfig = localConfig,
         processConfig = processConfig,
         workDir = op.workDir
@@ -226,6 +227,12 @@ class ZincWorker(jobs: Int, useFileLocks: Boolean = false) extends AutoCloseable
         reportCachedProblems = reportCachedProblems,
         incrementalCompilation = op.incrementalCompilation,
         auxiliaryClassFileExtensions = op.auxiliaryClassFileExtensions,
+        semanticDbSourceRoot = op.semanticDbSourceRoot.map { root =>
+          val optionPrefix =
+            if (JvmWorkerUtil.isScala3(op.scalaVersion)) "-sourceroot:"
+            else "-P:semanticdb:sourceroot:"
+          (root, optionPrefix)
+        },
         localConfig = localConfig,
         processConfig = processConfig,
         workDir = op.workDir
@@ -338,6 +345,7 @@ class ZincWorker(jobs: Int, useFileLocks: Boolean = false) extends AutoCloseable
       reportCachedProblems: Boolean,
       incrementalCompilation: Boolean,
       auxiliaryClassFileExtensions: Seq[String],
+      semanticDbSourceRoot: Option[(os.Path, String)],
       zincCache: os.SubPath = os.sub / "zinc",
       localConfig: ZincWorker.LocalConfig,
       processConfig: ZincWorker.ProcessConfig,
@@ -382,11 +390,32 @@ class ZincWorker(jobs: Int, useFileLocks: Boolean = false) extends AutoCloseable
         os.remove.all(IncrementalAnnotationProcessing.snapshotPath(workDir))
     }
 
+    val workerCwd =
+      try java.nio.file.Paths.get("").toRealPath()
+      catch {
+        case _: java.io.IOException => java.nio.file.Paths.get("").toAbsolutePath.normalize()
+      }
+
+    def relativeToWorker(path: os.Path): java.nio.file.Path = {
+      val resolved = PathRef.toAbsNioPath(PathRef.toResolvedOsPath(path))
+      try {
+        val relative = workerCwd.relativize(resolved)
+        if (relative.toString.isEmpty) java.nio.file.Paths.get(".") else relative
+      } catch {
+        case _: IllegalArgumentException => resolved
+      }
+    }
+
+    val semanticDbScalacOptions = semanticDbSourceRoot.map { case (root, optionPrefix) =>
+      optionPrefix + relativeToWorker(root)
+    }
+    val effectiveScalacOptions = scalacOptions ++ semanticDbScalacOptions
+
     if (localConfig.logDebugEnabled) {
       processConfig.log.debug(
         s"""Compiling:
            |  javacOptions: ${javacOptions.map("'" + _ + "'").mkString(" ")}
-           |  scalacOptions: ${scalacOptions.map("'" + _ + "'").mkString(" ")}
+           |  scalacOptions: ${effectiveScalacOptions.map("'" + _ + "'").mkString(" ")}
            |  sources: ${sources.map("'" + _ + "'").mkString(" ")}
            |  classpath: ${compileClasspathPaths.map("'" + _ + "'").mkString(" ")}
            |  output: $classesDir"""
@@ -431,7 +460,11 @@ class ZincWorker(jobs: Int, useFileLocks: Boolean = false) extends AutoCloseable
       .map(path => converter.toVirtualFile(path.toNIO))
       .toArray
     val virtualSources = sources.iterator
-      .map(path => converter.toVirtualFile(path.toNIO))
+      .map(path =>
+        converter.toVirtualFile(
+          if (semanticDbSourceRoot.isDefined) relativeToWorker(path) else path.toNIO
+        )
+      )
       .toArray
 
     val externalHooks = new DefaultExternalHooks(
@@ -476,12 +509,12 @@ class ZincWorker(jobs: Int, useFileLocks: Boolean = false) extends AutoCloseable
       !localConfig.logPromptColored &&
         compilers.scalac().scalaInstance().version().startsWith("3.") &&
         // might be too broad
-        !scalacOptions.exists(_.startsWith("-color:"))
+        !effectiveScalacOptions.exists(_.startsWith("-color:"))
     ) {
       "-color:never"
     }
 
-    val finalScalacOptions = addColorNeverOption.toSeq ++ scalacOptions
+    val finalScalacOptions = addColorNeverOption.toSeq ++ effectiveScalacOptions
 
     val newReporter = reporter match {
       case None =>

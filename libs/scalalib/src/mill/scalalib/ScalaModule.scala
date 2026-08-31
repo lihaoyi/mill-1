@@ -686,9 +686,9 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase
       val sv = scalaVersion()
 
       val additionalScalacOptions = if (isScala3(sv)) {
-        Seq("-Xsemanticdb", s"-sourceroot:${BuildCtx.workspaceRoot}")
+        Seq("-Xsemanticdb")
       } else {
-        Seq("-Yrangepos", s"-P:semanticdb:sourceroot:${BuildCtx.workspaceRoot}")
+        Seq("-Yrangepos")
       }
 
       val scalacOptions = (
@@ -723,7 +723,8 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase
           compilerBridgeOpt = scalaCompilerBridge(),
           incrementalCompilation = zincIncrementalCompilation(),
           auxiliaryClassFileExtensions = zincAuxiliaryClassFileExtensions(),
-          workDir = Task.dest
+          workDir = Task.dest,
+          semanticDbSourceRoot = Some(BuildCtx.workspaceRoot)
         ),
         javaHome = javaHome().map(_.path),
         javaRuntimeOptions = jOpts.runtime,

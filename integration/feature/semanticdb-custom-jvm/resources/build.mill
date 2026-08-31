@@ -1,0 +1,16 @@
+package build
+
+import mill.*
+import mill.scalalib.*
+
+trait CustomJvmScalaModule extends ScalaModule {
+  def jvmVersion = "17"
+}
+
+object scala2 extends CustomJvmScalaModule {
+  def scalaVersion = "2.13.16"
+}
+
+object scala3 extends CustomJvmScalaModule {
+  def scalaVersion = "3.3.7"
+}
